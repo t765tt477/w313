@@ -44,6 +44,25 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/logs', logRoutes);
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Wasal Delivery API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      users: '/api/users',
+      drivers: '/api/drivers',
+      orders: '/api/orders',
+      admin: '/api/admin',
+      upload: '/api/upload',
+      notifications: '/api/notifications',
+      logs: '/api/logs'
+    }
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Wasal API is running' });
