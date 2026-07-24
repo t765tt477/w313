@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: wasal-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: PORT
+        value: 10000
