@@ -2,10 +2,12 @@ services:
   - type: web
     name: wasal-backend
     env: node
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: cd back-end && npm install
+    startCommand: cd back-end && npm start
     envVars:
       - key: NODE_VERSION
-        value: 18
+        value: 20
       - key: PORT
         value: 10000
+      - key: MONGODB_URI
+        value: mongodb+srv://username:password@cluster.mongodb.net/wasal
