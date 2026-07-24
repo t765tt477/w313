@@ -2,8 +2,8 @@ services:
   - type: web
     name: wasal-backend
     env: node
-    buildCommand: cd back-end && npm install
-    startCommand: cd back-end && npm start
+    buildCommand: cd wasal/back-end && npm install
+    startCommand: cd wasal/back-end && npm start
     envVars:
       - key: NODE_VERSION
         value: 20
