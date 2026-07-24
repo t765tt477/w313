@@ -11,3 +11,5 @@ services:
         value: 10000
       - key: MONGODB_URI
         value: mongodb+srv://username:password@cluster.mongodb.net/wasal
+      - key: MONGODB_IP_RANGE
+        value: 74.220.48.0/24
