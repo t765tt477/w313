@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Cairo+Play:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Cairo', sans-serif;
+  --font-display: 'Cairo Play', sans-serif;
+
+  --color-brand-green: #16a34a;
+  --color-brand-green-dark: #14532d;
+  --color-brand-green-light: #22c55e;
+  --color-brand-green-pale: #dcfce7;
+  --color-brand-yellow: #eab308;
+  --color-brand-yellow-light: #fef08a;
+  --color-brand-yellow-dark: #a16207;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  direction: rtl;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Cairo', sans-serif;
+  background-color: #ffffff;
+  color: gray;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide scrollbar by default, show on scroll */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #22c55e;
+  border-radius: 4px;
+}
+
+.top-spacing {
+  padding-top: 62px;
+}
+
+.text-slate-900 {
+  color: #17a617;
+}
+
+.first-page {
+  overflow: auto;
+  height: 100vh;
+}
+
+/* Leaflet Map Styles */
+.leaflet-container {
+  font-family: 'Cairo', sans-serif;
+}
