@@ -2,7 +2,7 @@ services:
   - type: web
     name: wasal-backend
     env: node
-    buildCommand: cd back-end && npm install
+    buildCommand: cd back-end && npm install --legacy-peer-deps
     startCommand: cd back-end && npm start
     envVars:
       - key: NODE_VERSION
