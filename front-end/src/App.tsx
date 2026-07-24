@@ -275,7 +275,7 @@ export default function App() {
               className="flex items-center gap-2 group"
             >
               <div className="w-9 h-9 rounded-lg over-flow-hidden shadow-md group-hover:shadow-lg transition-shadow">
-                <img className="rounded-lg w-full h-full" src="https://res.cloudinary.com/dxuxjz0tx/image/upload/v1784730022/photo-output_zz7bpc.png" alt="" />
+                <img className="rounded-lg w-full h-full" src="https://res.cloudinary.com/efc2cuqx/image/upload/v1784902051/wasal_jilzjp.png" alt="" />
               </div>
               <span className="text-xl font-black text-yellow-500 tracking-wide">
                 وصل
