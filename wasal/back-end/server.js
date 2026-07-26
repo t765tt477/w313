@@ -16,6 +16,14 @@ const staticAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Add production frontend URLs
+const productionOrigins = [
+  'https://wasal-control-panel.vercel.app',
+  'https://wasal-client.vercel.app'
+];
+
+const allowedOrigins = [...staticAllowedOrigins, ...productionOrigins];
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow non-browser requests (curl, mobile apps, server-to-server) with no Origin header
@@ -23,7 +31,7 @@ app.use(cors({
     // Any localhost/127.0.0.1 port - Vite silently picks 5174/5175/... when 5173 is busy,
     // which used to get rejected here and made every request (including registration) fail.
     if (/^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return callback(null, true);
-    if (staticAllowedOrigins.includes(origin)) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
