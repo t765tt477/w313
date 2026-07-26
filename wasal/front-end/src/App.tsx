@@ -260,7 +260,6 @@ export default function App() {
       setToken(res.data.token)
       localStorage.setItem('token', res.data.token)
       setUser(res.data.user)
-      setMessage('تم تسجيل الدخول بنجاح')
 
       // Redirect based on user role
       if (res.data.user.role === 'driver') {
@@ -288,7 +287,7 @@ export default function App() {
       return
     }
     if (registerForm.password !== registerForm.confirmPassword) {
-      setMessage('كلمة المرور وتأكيدها غير متطابقين')
+      setMessage('كلمتي المرور غير متطابقين')
       return
     }
     setLoading(true)
@@ -485,9 +484,7 @@ export default function App() {
     setLoading(false)
   }
 
-  const handleWithdrawEarnings = () => {
-    setMessage('سيتم معالجة طلب السحب قريبًا')
-  }
+
 
   const handleLogout = () => {
     disconnectSocket()
@@ -499,15 +496,13 @@ export default function App() {
     setOrders([])
     setDriverProfile(null)
     setDriverEarnings([])
-    setMessage('تم تسجيل الخروج بنجاح')
   }
 
   // Forgot Password handlers
   const handleForgotPassword = async () => {
     setLoading(true)
     try {
-      const res = await authAPI.forgotPassword(forgotPasswordForm.email)
-      setMessage('تم إرسال رمز التحقق إلى بريدك الإلكتروني')
+      await authAPI.forgotPassword(forgotPasswordForm.email)
       setForgotPasswordStep('otp')
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إرسال رمز التحقق')
@@ -518,8 +513,7 @@ export default function App() {
   const handleResendForgotPasswordOTP = async () => {
     setLoading(true)
     try {
-      const res = await authAPI.forgotPassword(forgotPasswordForm.email)
-      setMessage('تم إعادة إرسال رمز التحقق بنجاح')
+      await authAPI.forgotPassword(forgotPasswordForm.email)
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إعادة إرسال الرمز')
     }
@@ -534,7 +528,6 @@ export default function App() {
         otp: forgotPasswordForm.otp,
         newPassword: forgotPasswordForm.newPassword
       })
-      setMessage('تم تغيير كلمة المرور بنجاح')
       setForgotPasswordStep('email')
       setForgotPasswordForm({ email: '', otp: '', newPassword: '' })
       setActiveTab('login')
@@ -915,10 +908,12 @@ export default function App() {
                         </h2>
                         <div className="space-y-4">
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-email" className="block text-sm font-semibold text-slate-700 mb-2">
                               رقم الهاتف أو البريد الإلكتروني
                             </label>
                             <input
+                              id="login-email"
+                              name="login-email"
                               type="text"
                               placeholder="05XXXXXXXX أو name@email.com"
                               value={loginForm.email}
@@ -927,11 +922,13 @@ export default function App() {
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700 mb-2">
                               كلمة المرور
                             </label>
                             <div className="relative">
                               <input
+                                id="login-password"
+                                name="login-password"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
                                 value={loginForm.password}
@@ -982,10 +979,12 @@ export default function App() {
                           {forgotPasswordStep === 'email' && (
                             <>
                               <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-email" className="block text-sm font-semibold text-slate-700 mb-2">
                                   البريد الإلكتروني
                                 </label>
                                 <input
+                                  id="forgot-email"
+                                  name="forgot-email"
                                   type="email"
                                   placeholder="name@email.com"
                                   value={forgotPasswordForm.email}
@@ -1016,10 +1015,12 @@ export default function App() {
                           {forgotPasswordStep === 'otp' && (
                             <>
                               <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-otp" className="block text-sm font-semibold text-slate-700 mb-2">
                                   رمز التحقق (6 أرقام)
                                 </label>
                                 <input
+                                  id="forgot-otp"
+                                  name="forgot-otp"
                                   type="text"
                                   placeholder="123456"
                                   value={forgotPasswordForm.otp}
@@ -1029,11 +1030,13 @@ export default function App() {
                                 />
                               </div>
                               <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-new-password" className="block text-sm font-semibold text-slate-700 mb-2">
                                   كلمة المرور الجديدة
                                 </label>
                                 <div className="relative">
                                   <input
+                                    id="forgot-new-password"
+                                    name="forgot-new-password"
                                     type={showNewPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={forgotPasswordForm.newPassword}
@@ -1116,12 +1119,14 @@ export default function App() {
                             },
                           ].map((f) => (
                             <div key={f.key}>
-                              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                              <label htmlFor={`register-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
                                 {f.label}
                               </label>
                               {f.type === "password" ? (
                                 <div className="relative">
                                   <input
+                                    id={`register-${f.key}`}
+                                    name={`register-${f.key}`}
                                     type={f.visible ? "text" : "password"}
                                     placeholder={f.ph}
                                     value={registerForm[f.key as keyof typeof registerForm]}
@@ -1138,6 +1143,8 @@ export default function App() {
                                 </div>
                               ) : (
                                 <input
+                                  id={`register-${f.key}`}
+                                  name={`register-${f.key}`}
                                   type={f.type}
                                   placeholder={f.ph}
                                   value={registerForm[f.key as keyof typeof registerForm]}
@@ -1148,10 +1155,12 @@ export default function App() {
                             </div>
                           ))}
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="register-city" className="block text-sm font-semibold text-slate-700 mb-2">
                               المدينة
                             </label>
                             <select
+                              id="register-city"
+                              name="register-city"
                               value={registerForm.city}
                               onChange={(e) => setRegisterForm({ ...registerForm, city: e.target.value })}
                               className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
@@ -1223,10 +1232,12 @@ export default function App() {
 
                   <div className="grid sm:grid-cols-2 gap-4 px-4">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      <label htmlFor="order-weight" className="block text-sm font-semibold text-slate-700 mb-2">
                         الوزن (كجم)
                       </label>
                       <input
+                        id="order-weight"
+                        name="order-weight"
                         type="number"
                         value={orderForm.weight}
                         onChange={(e) => setOrderForm({ ...orderForm, weight: Number(e.target.value) })}
@@ -1234,10 +1245,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      <label htmlFor="order-size" className="block text-sm font-semibold text-slate-700 mb-2">
                         الحجم (وحدة)
                       </label>
                       <select
+                        id="order-size"
+                        name="order-size"
                         value={orderForm.size}
                         onChange={(e) => setOrderForm({ ...orderForm, size: e.target.value })}
                         className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right bg-white"
@@ -1475,10 +1488,12 @@ export default function App() {
                         </h2>
                         <div className="space-y-4">
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-email" className="block text-sm font-semibold text-slate-700 mb-2">
                               رقم الهاتف أو البريد الإلكتروني
                             </label>
                             <input
+                              id="login-email"
+                              name="login-email"
                               type="text"
                               placeholder="05XXXXXXXX أو name@email.com"
                               value={loginForm.email}
@@ -1487,11 +1502,13 @@ export default function App() {
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700 mb-2">
                               كلمة المرور
                             </label>
                             <div className="relative">
                               <input
+                                id="login-password"
+                                name="login-password"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
                                 value={loginForm.password}
@@ -1542,10 +1559,12 @@ export default function App() {
                           {forgotPasswordStep === 'email' && (
                             <>
                               <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-email" className="block text-sm font-semibold text-slate-700 mb-2">
                                   البريد الإلكتروني
                                 </label>
                                 <input
+                                  id="forgot-email"
+                                  name="forgot-email"
                                   type="email"
                                   placeholder="name@email.com"
                                   value={forgotPasswordForm.email}
@@ -1576,10 +1595,12 @@ export default function App() {
                           {forgotPasswordStep === 'otp' && (
                             <>
                               <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-otp" className="block text-sm font-semibold text-slate-700 mb-2">
                                   رمز التحقق (6 أرقام)
                                 </label>
                                 <input
+                                  id="forgot-otp"
+                                  name="forgot-otp"
                                   type="text"
                                   placeholder="123456"
                                   value={forgotPasswordForm.otp}
@@ -1589,11 +1610,13 @@ export default function App() {
                                 />
                               </div>
                               <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-new-password" className="block text-sm font-semibold text-slate-700 mb-2">
                                   كلمة المرور الجديدة
                                 </label>
                                 <div className="relative">
                                   <input
+                                    id="forgot-new-password"
+                                    name="forgot-new-password"
                                     type={showNewPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={forgotPasswordForm.newPassword}
@@ -1676,12 +1699,14 @@ export default function App() {
                             },
                           ].map((f) => (
                             <div key={f.key}>
-                              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                              <label htmlFor={`driver-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
                                 {f.label}
                               </label>
                               {f.type === "password" ? (
                                 <div className="relative">
                                   <input
+                                    id={`driver-${f.key}`}
+                                    name={`driver-${f.key}`}
                                     type={f.visible ? "text" : "password"}
                                     placeholder={f.ph}
                                     value={driverForm[f.key as keyof typeof driverForm]}
@@ -1698,6 +1723,8 @@ export default function App() {
                                 </div>
                               ) : (
                                 <input
+                                  id={`driver-${f.key}`}
+                                  name={`driver-${f.key}`}
                                   type={f.type}
                                   placeholder={f.ph}
                                   value={driverForm[f.key as keyof typeof driverForm]}
@@ -1894,12 +1921,6 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={handleWithdrawEarnings}
-                      className="mt-3 w-full bg-green-600 text-white text-center font-bold text-sm py-3 rounded-xl cursor-pointer hover:bg-green-700 transition-colors"
-                    >
-                      سحب الأرباح
-                    </button>
                   </div>
                 </div>
               ) : (
@@ -2013,10 +2034,12 @@ export default function App() {
                             },
                           ].map((f) => (
                             <div key={f.key}>
-                              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                              <label htmlFor={`driver-step1-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
                                 {f.label}
                               </label>
                               <input
+                                id={`driver-step1-${f.key}`}
+                                name={`driver-step1-${f.key}`}
                                 type={f.type}
                                 placeholder={f.ph}
                                 value={driverForm[f.key as keyof typeof driverForm]}
@@ -2026,10 +2049,12 @@ export default function App() {
                             </div>
                           ))}
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="driver-city" className="block text-sm font-semibold text-slate-700 mb-2">
                               مدينة الإقامة
                             </label>
                             <select
+                              id="driver-city"
+                              name="driver-city"
                               value={driverForm.city}
                               onChange={(e) => setDriverForm({ ...driverForm, city: e.target.value })}
                               className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
@@ -2069,10 +2094,12 @@ export default function App() {
                         <div className="space-y-4">
                           <div className="grid sm:grid-cols-2 gap-4">
                             <div>
-                              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                              <label htmlFor="driver-vehicle-type" className="block text-sm font-semibold text-slate-700 mb-2">
                                 نوع المركبة
                               </label>
                               <select
+                                id="driver-vehicle-type"
+                                name="driver-vehicle-type"
                                 value={driverForm.vehicleType}
                                 onChange={(e) => setDriverForm({ ...driverForm, vehicleType: e.target.value })}
                                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
@@ -2090,10 +2117,12 @@ export default function App() {
                               { label: "رقم الشاسيه", ph: "XXXXXXXXXXXXXXXXX", key: "chassisNumber" },
                             ].map((f) => (
                               <div key={f.key}>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor={`driver-step2-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
                                   {f.label}
                                 </label>
                                 <input
+                                  id={`driver-step2-${f.key}`}
+                                  name={`driver-step2-${f.key}`}
                                   type="text"
                                   placeholder={f.ph}
                                   value={driverForm[f.key as keyof typeof driverForm]}
@@ -2213,6 +2242,8 @@ export default function App() {
                         </div>
                         <label className="flex items-start gap-3 cursor-pointer mb-6">
                           <input
+                            id="driver-agreement"
+                            name="driver-agreement"
                             type="checkbox"
                             className="mt-1 w-5 h-5 accent-green-600 cursor-pointer"
                           />
@@ -2270,14 +2301,6 @@ export default function App() {
                                 لا توجد أرباح مسجلة لهذا الشهر
                               </div>
                             )}
-                          </div>
-                          <div className="mt-3 flex gap-2">
-                            <div
-                              onClick={handleWithdrawEarnings}
-                              className="flex-1 bg-green-600 text-white text-center font-bold text-sm py-3 rounded-xl cursor-pointer hover:bg-green-700 transition-colors"
-                            >
-                              سحب الأرباح
-                            </div>
                           </div>
                         </div>
                       </div>

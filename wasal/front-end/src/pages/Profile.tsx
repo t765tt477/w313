@@ -39,6 +39,7 @@ export default function Profile({ user, onLogout }: ProfileProps) {
                 {user?.role === 'driver' ? 'مندوب' : 'عميل'}
               </span>
             </div>
+
             <button
               onClick={onLogout}
               className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors text-sm"
@@ -51,32 +52,6 @@ export default function Profile({ user, onLogout }: ProfileProps) {
         {/* Account Details */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-            <h2 className="text-sm font-black text-slate-900 mb-6">معلومات الحساب</h2>
-            <div className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم الكامل</label>
-                  <div className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm bg-slate-50 text-slate-700">
-                    {user?.name || '---'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">رقم الهاتف</label>
-                  <div className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm bg-slate-50 text-slate-700">
-                    {user?.phone || '---'}
-                  </div>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
-                  <div className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm bg-slate-50 text-slate-700">
-                    {user?.email || '---'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
             <h2 className="text-sm font-black text-slate-900 mb-6">الإعدادات</h2>
             <div className="space-y-3">
               <button className="w-full flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
@@ -86,6 +61,8 @@ export default function Profile({ user, onLogout }: ProfileProps) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                     </svg>
                   </div>
+
+
                   <div className="text-right">
                     <div className="font-semibold text-slate-900 text-sm">تغيير كلمة المرور</div>
                     <div className="text-xs text-slate-500">تحديث كلمة المرور الخاصة بك</div>

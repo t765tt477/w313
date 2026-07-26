@@ -75,18 +75,7 @@ app.use('/api/cities', cityRoutes);
 // Root route
 app.get('/', (req, res) => {
   res.json({
-    message: 'Wasal Delivery API',
-    version: '1.0.0',
-    endpoints: {
-      health: '/api/health',
-      auth: '/api/auth',
-      users: '/api/users',
-      drivers: '/api/drivers',
-      orders: '/api/orders',
-      admin: '/api/admin',
-      notifications: '/api/notifications',
-      logs: '/api/logs'
-    }
+    message: 'Wasal API Is Healthy'
   });
 });
 

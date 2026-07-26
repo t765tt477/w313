@@ -168,6 +168,8 @@ export default function LocationPicker({
         <div className="flex gap-2 px-4">
           <div className="flex-1 relative">
             <input
+              id="location-search"
+              name="location-search"
               type="text"
               placeholder="ابحث عن عنوان..."
               value={searchQuery}
