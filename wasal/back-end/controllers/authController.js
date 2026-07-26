@@ -124,10 +124,13 @@ export const register = async (req, res) => {
 
     if (!emailSent) {
       console.warn('Failed to send OTP email, but registration continues');
+      return res.status(500).json({
+        message: 'فشل إرسال رمز التحقق، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني'
+      });
     }
 
     res.status(201).json({
-      message: 'User registered successfully. Please verify with OTP sent to your email.',
+      message: 'تم إنشاء الحساب بنجاح. يرجى التحقق باستخدام رمز التحقق المرسل إلى بريدك الإلكتروني.',
       userId: user._id
     });
   } catch (error) {
@@ -286,10 +289,16 @@ export const forgotPassword = async (req, res) => {
     await user.save();
 
     // Send OTP email
-    await sendOTPEmail(email, otp, user.name);
+    const emailSent = await sendOTPEmail(email, otp, user.name);
+
+    if (!emailSent) {
+      return res.status(500).json({
+        message: 'فشل إرسال رمز التحقق، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني'
+      });
+    }
 
     res.status(200).json({
-      message: 'OTP sent to your email'
+      message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني'
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -358,10 +367,16 @@ export const resendOTP = async (req, res) => {
     await user.save();
 
     // Send OTP email
-    await sendOTPEmail(user.email, otp, user.name);
+    const emailSent = await sendOTPEmail(user.email, otp, user.name);
+
+    if (!emailSent) {
+      return res.status(500).json({
+        message: 'فشل إرسال رمز التحقق، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني'
+      });
+    }
 
     res.status(200).json({
-      message: 'OTP resent successfully'
+      message: 'تم إعادة إرسال رمز التحقق بنجاح'
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

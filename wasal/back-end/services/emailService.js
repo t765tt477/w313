@@ -7,6 +7,9 @@ const createTransporter = () => {
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
 };
@@ -14,7 +17,18 @@ const createTransporter = () => {
 // Send OTP email
 export const sendOTPEmail = async (email, otp, name) => {
   try {
+    // Check if email credentials are configured
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      console.error('❌ Email credentials not configured in environment variables');
+      console.log(`⚠️ OTP for ${email} (${name}): ${otp}`);
+      return false;
+    }
+
     const transporter = createTransporter();
+
+    // Verify transporter configuration
+    await transporter.verify();
+    console.log('✅ Email transporter verified successfully');
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -38,7 +52,8 @@ export const sendOTPEmail = async (email, otp, name) => {
     console.log(`✅ OTP sent to ${email}: ${otp}`);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('❌ Error sending email:', error.message);
+    console.error('Full error:', error);
     console.log(`⚠️ OTP for ${email} (${name}): ${otp}`);
     return false;
   }
