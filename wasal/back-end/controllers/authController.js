@@ -264,6 +264,7 @@ export const login = async (req, res) => {
 // Forgot Password - Send OTP
 export const forgotPassword = async (req, res) => {
   try {
+    console.log('📧 Forgot password request received for email:', req.body.email);
     const { email } = req.body;
 
     let user;
@@ -276,7 +277,8 @@ export const forgotPassword = async (req, res) => {
     }
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      console.log('❌ User not found for email:', email);
+      return res.status(404).json({ message: 'المستخدم غير موجود' });
     }
 
     const otp = generateOTP();
@@ -288,20 +290,26 @@ export const forgotPassword = async (req, res) => {
     };
     await user.save();
 
+    console.log('🔢 Generated OTP for user:', user.name, 'OTP:', otp);
+
     // Send OTP email
     const emailSent = await sendOTPEmail(email, otp, user.name);
 
     if (!emailSent) {
+      console.error('❌ Failed to send OTP email for:', email);
       return res.status(500).json({
         message: 'فشل إرسال رمز التحقق، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني'
       });
     }
 
+    console.log('✅ OTP sent successfully to:', email);
     res.status(200).json({
       message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني'
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('❌ Forgot password error:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ message: 'حدث خطأ أثناء معالجة الطلب' });
   }
 };
 
