@@ -19,7 +19,8 @@ const staticAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 // Add production frontend URLs
 const productionOrigins = [
   'https://wasal-control-panel.vercel.app',
-  'https://wasal-client.vercel.app'
+  'https://wasal-client.vercel.app',
+  'https://wasalsd.vercel.app'
 ];
 
 const allowedOrigins = [...staticAllowedOrigins, ...productionOrigins];
