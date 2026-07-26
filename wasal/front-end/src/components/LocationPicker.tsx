@@ -39,6 +39,7 @@ interface LocationPickerProps {
   initialLat?: number;
   initialLng?: number;
   height?: string;
+  id?: string;
 }
 
 function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
@@ -66,7 +67,8 @@ export default function LocationPicker({
   onLocationSelect,
   initialLat = 24.7136,
   initialLng = 46.6753,
-  height = '400px'
+  height = '400px',
+  id
 }: LocationPickerProps) {
   const [position, setPosition] = useState<L.LatLngExpression>([initialLat, initialLng]);
   const [address, setAddress] = useState<string>('');
@@ -162,7 +164,7 @@ export default function LocationPicker({
   }, [initialLat, initialLng]);
 
   return (
-    <div className="w-full">
+    <div className="w-full" id={id}>
       {/* Search Bar */}
       <div className="mb-3 relative">
         <div className="flex gap-2 px-4">

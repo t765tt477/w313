@@ -908,12 +908,12 @@ export default function App() {
                         </h2>
                         <div className="space-y-4">
                           <div>
-                            <label htmlFor="login-email" className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
                               رقم الهاتف أو البريد الإلكتروني
                             </label>
                             <input
-                              id="login-email"
-                              name="login-email"
+                              id="login-email-2"
+                              name="login-email-2"
                               type="text"
                               placeholder="05XXXXXXXX أو name@email.com"
                               value={loginForm.email}
@@ -922,13 +922,13 @@ export default function App() {
                             />
                           </div>
                           <div>
-                            <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
                               كلمة المرور
                             </label>
                             <div className="relative">
                               <input
-                                id="login-password"
-                                name="login-password"
+                                id="login-password-2"
+                                name="login-password-2"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
                                 value={loginForm.password}
@@ -979,12 +979,12 @@ export default function App() {
                           {forgotPasswordStep === 'email' && (
                             <>
                               <div>
-                                <label htmlFor="forgot-email" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
                                   البريد الإلكتروني
                                 </label>
                                 <input
-                                  id="forgot-email"
-                                  name="forgot-email"
+                                  id="forgot-email-2"
+                                  name="forgot-email-2"
                                   type="email"
                                   placeholder="name@email.com"
                                   value={forgotPasswordForm.email}
@@ -1015,12 +1015,12 @@ export default function App() {
                           {forgotPasswordStep === 'otp' && (
                             <>
                               <div>
-                                <label htmlFor="forgot-otp" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-otp-2" className="block text-sm font-semibold text-slate-700 mb-2">
                                   رمز التحقق (6 أرقام)
                                 </label>
                                 <input
-                                  id="forgot-otp"
-                                  name="forgot-otp"
+                                  id="forgot-otp-2"
+                                  name="forgot-otp-2"
                                   type="text"
                                   placeholder="123456"
                                   value={forgotPasswordForm.otp}
@@ -1030,13 +1030,13 @@ export default function App() {
                                 />
                               </div>
                               <div>
-                                <label htmlFor="forgot-new-password" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-new-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
                                   كلمة المرور الجديدة
                                 </label>
                                 <div className="relative">
                                   <input
-                                    id="forgot-new-password"
-                                    name="forgot-new-password"
+                                    id="forgot-new-password-2"
+                                    name="forgot-new-password-2"
                                     type={showNewPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={forgotPasswordForm.newPassword}
@@ -1206,10 +1206,11 @@ export default function App() {
                   {/* Location Pickers */}
                   <div className="space-y-6 mb-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2 px-4">
+                      <label htmlFor="pickup-location" className="block text-sm font-semibold text-slate-700 mb-2 px-4">
                         📍 موقع الاستلام
                       </label>
                       <LocationPicker
+                        id="pickup-location"
                         onLocationSelect={(lat, lng, address) => setPickupLocation({ lat, lng, address })}
                         initialLat={24.7136}
                         initialLng={46.6753}
@@ -1218,10 +1219,11 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      <label htmlFor="delivery-location" className="block text-sm font-semibold text-slate-700 mb-2">
                         📍 موقع التسليم
                       </label>
                       <LocationPicker
+                        id="delivery-location"
                         onLocationSelect={(lat, lng, address) => setDeliveryLocation({ lat, lng, address })}
                         initialLat={24.7236}
                         initialLng={46.6853}
@@ -1488,12 +1490,12 @@ export default function App() {
                         </h2>
                         <div className="space-y-4">
                           <div>
-                            <label htmlFor="login-email" className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
                               رقم الهاتف أو البريد الإلكتروني
                             </label>
                             <input
-                              id="login-email"
-                              name="login-email"
+                              id="login-email-2"
+                              name="login-email-2"
                               type="text"
                               placeholder="05XXXXXXXX أو name@email.com"
                               value={loginForm.email}
@@ -1502,13 +1504,13 @@ export default function App() {
                             />
                           </div>
                           <div>
-                            <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700 mb-2">
+                            <label htmlFor="login-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
                               كلمة المرور
                             </label>
                             <div className="relative">
                               <input
-                                id="login-password"
-                                name="login-password"
+                                id="login-password-2"
+                                name="login-password-2"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
                                 value={loginForm.password}
@@ -1559,12 +1561,12 @@ export default function App() {
                           {forgotPasswordStep === 'email' && (
                             <>
                               <div>
-                                <label htmlFor="forgot-email" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
                                   البريد الإلكتروني
                                 </label>
                                 <input
-                                  id="forgot-email"
-                                  name="forgot-email"
+                                  id="forgot-email-2"
+                                  name="forgot-email-2"
                                   type="email"
                                   placeholder="name@email.com"
                                   value={forgotPasswordForm.email}
@@ -1595,12 +1597,12 @@ export default function App() {
                           {forgotPasswordStep === 'otp' && (
                             <>
                               <div>
-                                <label htmlFor="forgot-otp" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-otp-2" className="block text-sm font-semibold text-slate-700 mb-2">
                                   رمز التحقق (6 أرقام)
                                 </label>
                                 <input
-                                  id="forgot-otp"
-                                  name="forgot-otp"
+                                  id="forgot-otp-2"
+                                  name="forgot-otp-2"
                                   type="text"
                                   placeholder="123456"
                                   value={forgotPasswordForm.otp}
@@ -1610,13 +1612,13 @@ export default function App() {
                                 />
                               </div>
                               <div>
-                                <label htmlFor="forgot-new-password" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label htmlFor="forgot-new-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
                                   كلمة المرور الجديدة
                                 </label>
                                 <div className="relative">
                                   <input
-                                    id="forgot-new-password"
-                                    name="forgot-new-password"
+                                    id="forgot-new-password-2"
+                                    name="forgot-new-password-2"
                                     type={showNewPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={forgotPasswordForm.newPassword}
