@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import Admin from '../models/Admin.js';
 import Driver from '../models/Driver.js';
 import Client from '../models/Client.js';
+import City from '../models/City.js';
 import { createLog } from './logController.js';
 import { sendOTPEmail } from '../services/emailService.js';
 
@@ -15,8 +16,39 @@ const generateOTP = () => {
 // Register with OTP
 export const register = async (req, res) => {
   try {
-    const { name, email, phone, password, role } = req.body;
+    console.log('Registration request received:', req.body);
+    const { name, email, phone, password, role, city } = req.body;
     const userRole = role || 'client';
+
+    console.log('User role:', userRole);
+    console.log('Name:', name, 'Email:', email, 'Phone:', phone);
+
+    // Validate required fields up front with clear messages, instead of
+    // letting a raw Mongoose validation error (in English) bubble up and
+    // show as a confusing generic failure on the client.
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'الاسم مطلوب' });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: 'البريد الإلكتروني مطلوب' });
+    }
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ message: 'رقم الهاتف مطلوب' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
+    }
+
+    let cityDoc = null;
+    if (userRole === 'client' || userRole === 'driver') {
+      if (!city) {
+        return res.status(400).json({ message: 'يرجى اختيار المدينة' });
+      }
+      cityDoc = await City.findById(city).catch(() => null);
+      if (!cityDoc || !cityDoc.isActive) {
+        return res.status(400).json({ message: 'المدينة المختارة غير متاحة، يرجى اختيار مدينة أخرى' });
+      }
+    }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -31,7 +63,7 @@ export const register = async (req, res) => {
       // Check if admin exists
       const existingAdmin = await Admin.findOne({ $or: [{ email }, { phone }] });
       if (existingAdmin) {
-        return res.status(400).json({ message: 'Admin already exists' });
+        return res.status(400).json({ message: 'يوجد حساب مسجل بهذا البريد الإلكتروني أو رقم الهاتف بالفعل' });
       }
 
       user = await Admin.create({
@@ -50,7 +82,7 @@ export const register = async (req, res) => {
       // Check if driver exists
       const existingDriver = await Driver.findOne({ $or: [{ email }, { phone }] });
       if (existingDriver) {
-        return res.status(400).json({ message: 'Driver already exists' });
+        return res.status(400).json({ message: 'يوجد حساب مسجل بهذا البريد الإلكتروني أو رقم الهاتف بالفعل' });
       }
 
       user = await Driver.create({
@@ -58,6 +90,7 @@ export const register = async (req, res) => {
         email,
         phone,
         password: hashedPassword,
+        city: cityDoc._id,
         vehicleType: req.body.vehicleType || 'motorcycle',
         vehicleNumber: req.body.vehicleNumber || '',
         licenseNumber: req.body.licenseNumber || '',
@@ -70,7 +103,7 @@ export const register = async (req, res) => {
       // Client
       const existingClient = await Client.findOne({ $or: [{ email }, { phone }] });
       if (existingClient) {
-        return res.status(400).json({ message: 'Client already exists' });
+        return res.status(400).json({ message: 'يوجد حساب مسجل بهذا البريد الإلكتروني أو رقم الهاتف بالفعل' });
       }
 
       user = await Client.create({
@@ -78,6 +111,7 @@ export const register = async (req, res) => {
         email,
         phone,
         password: hashedPassword,
+        city: cityDoc._id,
         otp: {
           code: otp,
           expiresAt: otpExpiresAt
@@ -86,14 +120,29 @@ export const register = async (req, res) => {
     }
 
     // Send OTP email
-    await sendOTPEmail(email, otp, name);
+    const emailSent = await sendOTPEmail(email, otp, name);
+
+    if (!emailSent) {
+      console.warn('Failed to send OTP email, but registration continues');
+    }
 
     res.status(201).json({
       message: 'User registered successfully. Please verify with OTP sent to your email.',
       userId: user._id
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Registration error:', error);
+
+    // Friendly messages instead of raw Mongoose/Mongo error text
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'يوجد حساب مسجل بهذا البريد الإلكتروني أو رقم الهاتف بالفعل' });
+    }
+    if (error.name === 'ValidationError') {
+      const firstError = Object.values(error.errors)[0];
+      return res.status(400).json({ message: firstError?.message || 'بيانات غير صحيحة، يرجى المراجعة' });
+    }
+
+    res.status(500).json({ message: 'حدث خطأ أثناء إنشاء الحساب، حاول مرة أخرى' });
   }
 };
 
@@ -275,6 +324,45 @@ export const resetPassword = async (req, res) => {
     await user.save();
 
     res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Resend OTP
+export const resendOTP = async (req, res) => {
+  try {
+    const { userId, role } = req.body;
+
+    let user;
+    if (role === 'admin' || role === 'super_admin') {
+      user = await Admin.findById(userId);
+    } else if (role === 'driver') {
+      user = await Driver.findById(userId);
+    } else {
+      user = await Client.findById(userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpiresAt = new Date(Date.now() + (process.env.OTP_EXPIRE || 15) * 60 * 1000);
+
+    user.otp = {
+      code: otp,
+      expiresAt: otpExpiresAt
+    };
+    await user.save();
+
+    // Send OTP email
+    await sendOTPEmail(user.email, otp, user.name);
+
+    res.status(200).json({
+      message: 'OTP resent successfully'
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

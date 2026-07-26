@@ -18,6 +18,11 @@ const driverSchema = new mongoose.Schema({
     required: [true, 'Please provide a phone number'],
     unique: true
   },
+  city: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'City',
+    required: [true, 'Please select your city']
+  },
   password: {
     type: String,
     required: [true, 'Please provide a password'],
@@ -90,6 +95,10 @@ const driverSchema = new mongoose.Schema({
   isVerified: {
     type: Boolean,
     default: false
+  },
+  role: {
+    type: String,
+    default: 'driver'
   },
   otp: {
     code: String,

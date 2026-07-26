@@ -1,4 +1,6 @@
 import Order from '../models/Order.js';
+import dispatchService from '../services/dispatchService.js';
+import { broadcastToAdmins } from './notificationController.js';
 
 // Create order
 export const createOrder = async (req, res) => {
@@ -36,6 +38,19 @@ export const createOrder = async (req, res) => {
     await order.populate('client', 'name phone');
 
     res.status(201).json({ message: 'Order created successfully', order });
+
+    broadcastToAdmins(
+      'new_order',
+      'طلب جديد',
+      `طلب توصيل جديد من ${order.client?.name || 'عميل'} بقيمة ${totalPrice.toFixed(2)} جنيه`,
+      { orderId: order._id }
+    );
+
+    // Fire-and-forget: find the nearest available driver and offer them the
+    // order. Runs after the response is sent so it never delays the client.
+    dispatchService.dispatchOrder(order._id).catch((err) => {
+      console.error('dispatchOrder error:', err.message);
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -94,7 +109,10 @@ export const cancelOrder = async (req, res) => {
     }
 
     order.status = 'cancelled';
+    order.dispatchStatus = 'cancelled';
+    order.dispatchDriver = null;
     await order.save();
+    await dispatchService.cancelDispatch(order._id);
 
     res.status(200).json({ message: 'Order cancelled', order });
   } catch (error) {

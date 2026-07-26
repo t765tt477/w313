@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Settings, LogOut, BarChart3, Users as Clients, Shield, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Settings, LogOut, BarChart3, Users as Clients, Shield, FileText, MapPin } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   activeTab: string;
-  onTabChange: (tab: 'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs') => void;
+  onTabChange: (tab: 'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs' | 'cities') => void;
 }
 
 export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarProps) {
@@ -24,10 +24,11 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
     { id: 'overview' as const, label: 'نظرة عامة', icon: LayoutDashboard },
     { id: 'drivers' as const, label: 'المندوبين', icon: Users },
     { id: 'orders' as const, label: 'الطلبات', icon: Package },
-    { id: 'users' as const, label: 'المستخدمين', icon: Clients },
+    { id: 'users' as const, label: 'الزباين', icon: Clients },
     { id: 'analytics' as const, label: 'التحليلات', icon: BarChart3 },
     { id: 'logs' as const, label: 'السجلات', icon: FileText },
-    ...(isSuperAdmin ? [{ id: 'admin-management' as const, label: 'إدارة الأدمنين', icon: Shield }] : []),
+    { id: 'cities' as const, label: 'المدن', icon: MapPin },
+    ...(isSuperAdmin ? [{ id: 'admin-management' as const, label: 'إدارة الموظفين', icon: Shield }] : []),
     { id: 'settings' as const, label: 'الإعدادات', icon: Settings },
   ];
 
@@ -52,7 +53,7 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
       {/* Sidebar */}
       <aside
         className="static top-0 right-0 h-full bg-white border-l border-slate-200 z-50"
-        style={{ width: '150px' }}
+        style={{ width: '160px' }}
       >
         <div className="flex flex-col h-full">
           {/* Header */}

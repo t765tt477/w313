@@ -1,5 +1,7 @@
 import Driver from '../models/Driver.js';
 import Order from '../models/Order.js';
+import dispatchService from '../services/dispatchService.js';
+import { emitToUser } from '../services/socketService.js';
 
 // Update driver profile
 export const updateDriverProfile = async (req, res) => {
@@ -49,6 +51,20 @@ export const updateLocation = async (req, res) => {
       { new: true }
     );
 
+    // If this driver currently has an order in progress, relay the position
+    // to the client so their tracking map updates live.
+    const activeOrder = await Order.findOne({
+      driver: req.user.id,
+      status: { $in: ['accepted', 'picked_up'] }
+    });
+    if (activeOrder) {
+      emitToUser(activeOrder.client, 'driver:location', {
+        orderId: activeOrder._id,
+        lat,
+        lng
+      });
+    }
+
     res.status(200).json({ message: 'Location updated', driver });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -84,27 +100,40 @@ export const getAvailableOrders = async (req, res) => {
   }
 };
 
-// Accept order
+// Accept order - only valid if this order was actually offered to this driver
 export const acceptOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
-
-    const driver = await Driver.findById(req.user.id);
-    if (!driver || !driver.isAvailable) {
-      return res.status(400).json({ message: 'Driver not available' });
-    }
-
-    const order = await Order.findById(orderId);
-    if (!order || order.status !== 'pending') {
-      return res.status(400).json({ message: 'Order not available' });
-    }
-
-    order.driver = driver._id;
-    order.status = 'accepted';
-    order.acceptedAt = new Date();
-    await order.save();
-
+    const order = await dispatchService.acceptOrder(orderId, req.user.id);
     res.status(200).json({ message: 'Order accepted', order });
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message });
+  }
+};
+
+// Reject order - the current offer is closed and instantly re-dispatched
+// to the next-nearest available driver.
+export const rejectOrder = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const order = await dispatchService.rejectOrder(orderId, req.user.id);
+    res.status(200).json({ message: 'Order rejected', order });
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message });
+  }
+};
+
+// Fallback for reconnects: returns the order (if any) currently offered to
+// this driver, in case they missed the real-time socket event.
+export const getPendingOffer = async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      dispatchDriver: req.user.id,
+      status: 'pending',
+      dispatchStatus: 'offered'
+    }).populate('client', 'name phone');
+
+    res.status(200).json({ order: order || null });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -144,6 +173,23 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    if (status === 'picked_up' || status === 'delivered') {
+      const Notification = (await import('../models/Notification.js')).default;
+      const notification = await Notification.create({
+        recipient: order.client,
+        recipientModel: 'Client',
+        type: status === 'picked_up' ? 'order_picked_up' : 'order_delivered',
+        title: status === 'picked_up' ? 'تم استلام طلبك' : 'تم توصيل طلبك',
+        message: status === 'picked_up'
+          ? 'استلم المندوب طلبك وهو في طريقه إليك الآن.'
+          : 'تم تسليم طلبك بنجاح، نتمنى لك يوماً سعيداً!',
+        data: { orderId: order._id, driverId: driver._id },
+        sound: true
+      });
+      emitToUser(order.client, 'notification:new', notification);
+      emitToUser(order.client, 'order:status_changed', { orderId: order._id, status, sound: true });
+    }
 
     res.status(200).json({ message: 'Order status updated', order });
   } catch (error) {

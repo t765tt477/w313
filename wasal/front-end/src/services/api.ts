@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://wasal-server.onrender.com/api';
+// const API_URL = import.meta.env.VITE_API_URL || 'https://wasal-server.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:50000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -17,10 +18,15 @@ api.interceptors.request.use((config: any) => {
 export const authAPI = {
   register: (data: any) => api.post('/auth/register', data),
   verifyOTP: (data: any) => api.post('/auth/verify-otp', data),
+  resendOTP: (data: any) => api.post('/auth/resend-otp', data),
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
   resetPassword: (data: any) => api.post('/auth/reset-password', data),
   getMe: () => api.get('/auth/me'),
+};
+
+export const cityAPI = {
+  getActiveCities: () => api.get('/cities/active'),
 };
 
 export const orderAPI = {
@@ -37,6 +43,8 @@ export const driverAPI = {
   toggleAvailability: () => api.put('/drivers/availability'),
   getAvailableOrders: () => api.get('/drivers/available-orders'),
   acceptOrder: (orderId: string) => api.post('/drivers/accept-order', { orderId }),
+  rejectOrder: (orderId: string) => api.post('/drivers/reject-order', { orderId }),
+  getPendingOffer: () => api.get('/drivers/pending-offer'),
   updateOrderStatus: (orderId: string, status: string) => api.put('/drivers/order-status', { orderId, status }),
   getDriverOrders: () => api.get('/drivers/orders'),
   getEarnings: () => api.get('/drivers/earnings'),

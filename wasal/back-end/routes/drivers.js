@@ -6,6 +6,8 @@ import {
   toggleAvailability,
   getAvailableOrders,
   acceptOrder,
+  rejectOrder,
+  getPendingOffer,
   updateOrderStatus,
   getDriverOrders,
   getEarnings
@@ -20,6 +22,8 @@ router.put('/location', protect, authorize('driver'), updateLocation);
 router.put('/availability', protect, authorize('driver'), toggleAvailability);
 router.get('/available-orders', protect, authorize('driver'), getAvailableOrders);
 router.post('/accept-order', protect, authorize('driver'), acceptOrder);
+router.post('/reject-order', protect, authorize('driver'), rejectOrder);
+router.get('/pending-offer', protect, authorize('driver'), getPendingOffer);
 router.put('/order-status', protect, authorize('driver'), updateOrderStatus);
 router.get('/orders', protect, authorize('driver'), getDriverOrders);
 router.get('/earnings', protect, authorize('driver'), getEarnings);

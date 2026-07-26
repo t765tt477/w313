@@ -11,7 +11,8 @@ import {
   createAdmin,
   updateAdmin,
   deleteAdmin,
-  toggleAdminSuspension
+  toggleAdminSuspension,
+  updateDriverImages
 } from '../controllers/adminController.js';
 import { protect, authorize, authorizeSuperAdmin } from '../middleware/auth.js';
 
@@ -22,6 +23,7 @@ router.get('/drivers', protect, authorize('admin', 'super_admin'), getAllDrivers
 router.post('/drivers/credit', protect, authorize('admin', 'super_admin'), addDriverCredit);
 router.get('/drivers/:id', protect, authorize('admin', 'super_admin'), getDriverDetails);
 router.put('/drivers/:id/approve', protect, authorize('admin', 'super_admin'), approveDriver);
+router.put('/drivers/:id/images', protect, authorize('admin', 'super_admin'), updateDriverImages);
 
 // Order routes (admin and super_admin)
 router.get('/orders', protect, authorize('admin', 'super_admin'), getAllOrders);

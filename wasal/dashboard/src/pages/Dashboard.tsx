@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI, logAPI } from '../services/api';
+import CitiesManager from '../components/CitiesManager';
 import Sidebar from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
-import { Search } from 'lucide-react';
+import { Search, RefreshCw, Settings, DollarSign, Lock, Share2 } from 'lucide-react';
 
 interface Analytics {
   totalUsers: number;
@@ -64,7 +65,7 @@ export default function Dashboard() {
   const [creditAmount, setCreditAmount] = useState('');
   const [creditDescription, setCreditDescription] = useState('');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs' | 'cities'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'approved' | 'pending'>('all');
@@ -87,6 +88,7 @@ export default function Dashboard() {
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logFilterType, setLogFilterType] = useState<'all' | 'driver' | 'order' | 'client' | 'admin'>('all');
   const [logFilterAction, setLogFilterAction] = useState<'all' | 'create' | 'update' | 'delete' | 'login' | 'logout'>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -197,6 +199,19 @@ export default function Dashboard() {
     navigate('/login');
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchData(),
+        fetchLogs(),
+        isSuperAdmin ? fetchAdmins() : Promise.resolve()
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const getUserRole = () => {
     const userStr = localStorage.getItem('adminUser');
     if (!userStr) return null;
@@ -219,28 +234,28 @@ export default function Dashboard() {
         password: adminPassword,
         role: adminRole
       });
-      alert('تم إنشاء الأدمن بنجاح');
+      alert('تم إنشاء الموظف بنجاح');
       setAdminEmail('');
       setAdminPassword('');
       setAdminName('');
       setAdminRole('admin');
       fetchAdmins();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'فشل إنشاء الأدمن');
+      alert(error.response?.data?.message || 'فشل إنشاء الموظف');
     } finally {
       setAdminLoading(false);
     }
   };
 
   const handleDeleteAdmin = async (adminId: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا الأدمن؟')) return;
+    if (!confirm('هل أنت متأكد من حذف هذا الموظف؟')) return;
 
     try {
       await adminAPI.deleteAdmin(adminId);
-      alert('تم حذف الأدمن بنجاح');
+      alert('تم حذف الموظف بنجاح');
       fetchAdmins();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'فشل حذف الأدمن');
+      alert(error.response?.data?.message || 'فشل حذف الموظف');
     }
   };
 
@@ -340,14 +355,24 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <div className="text-white text-sm">
-                    {currentUser?.name || 'أدمن'}
+                    {currentUser?.name || 'موظف'}
                   </div>
                   <div className="text-white text-xs">
-                    {currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin' ? 'سوبر أدمن' : 'أدمن'}
+                    {currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin' ? 'سوبر ادمن' : 'موظف'}
                   </div>
                 </div>
               </div>
-              <NotificationBell />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRefresh}
+                  className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-colors"
+                  title="تحديث الصفحة"
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+                <NotificationBell />
+              </div>
             </div>
           </div>
         </header>
@@ -362,7 +387,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.totalUsers}</div>
-                  <div className="text-slate-500 text-sm mt-1">إجمالي المستخدمين</div>
+                  <div className="text-slate-500 text-sm mt-1">إجمالي الزباين</div>
                 </div>
                 <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.totalDrivers}</div>
@@ -532,7 +557,7 @@ export default function Dashboard() {
                         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <input
                           type="text"
-                          placeholder="بحث برقم الطلب، العميل، المندوب، العناوين..."
+                          placeholder="بحث برقم الطلب، الزبون، المندوب، العناوين..."
                           value={orderSearchQuery}
                           onChange={(e) => setOrderSearchQuery(e.target.value)}
                           className="w-full pr-10 pl-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
@@ -565,7 +590,7 @@ export default function Dashboard() {
                     <thead className="bg-green-400">
                       <tr>
                         <th className="px-4 py-2 text-right text-sm font-bold text-white">رقم الطلب</th>
-                        <th className="px-4 py-2 text-right text-sm font-bold text-white">العميل</th>
+                        <th className="px-4 py-2 text-right text-sm font-bold text-white">الزبون</th>
                         <th className="px-4 py-2 text-right text-sm font-bold text-white">المندوب</th>
                         <th className="px-4 py-2 text-right text-sm font-bold text-white">من</th>
                         <th className="px-4 py-2 text-right text-sm font-bold text-white">إلى</th>
@@ -622,7 +647,7 @@ export default function Dashboard() {
             <div className="space-y-6">
               <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
-                  <h3 className="text-lg font-black text-green-800 mb-4">قائمة المستخدمين</h3>
+                  <h3 className="text-lg font-black text-green-800 mb-4">قائمة الزباين</h3>
 
                   {/* Search */}
                   <div className="flex flex-col md:flex-row gap-4">
@@ -669,8 +694,8 @@ export default function Dashboard() {
                                 {client.name || 'غير معروف'}
                               </button>
                             </td>
-                            <td className="px-4 py-4 text-sm text-slate-600">{client.phone || 'غير متوفر'}</td>
-                            <td className="px-4 py-4 text-sm">
+                            <td className="px-2 text-sm text-slate-600">{client.phone || 'غير متوفر'}</td>
+                            <td className="px-2 text-sm">
                               {client.email ? (
                                 <button
                                   onClick={() => window.open(`mailto:${client.email}`, '_blank')}
@@ -682,9 +707,9 @@ export default function Dashboard() {
                                 <span className="text-slate-600">غير متوفر</span>
                               )}
                             </td>
-                            <td className="px-4 py-4 text-sm text-slate-600 max-w-xs truncate">{client.address || 'غير متوفر'}</td>
-                            <td className="px-4 py-4 text-sm font-semibold text-yellow-600 text-center">{client.totalOrders || 0}</td>
-                            <td className="px-4 py-4 text-sm font-semibold text-green-600">{(client.totalSpent || 0).toFixed(2)} جنيه</td>
+                            <td className="px-2 text-sm text-slate-600 max-w-xs truncate">{client.address || 'غير متوفر'}</td>
+                            <td className="px-2 text-sm font-semibold text-yellow-600 text-center">{client.totalOrders || 0}</td>
+                            <td className="px-2 text-sm font-semibold text-green-600">{(client.totalSpent || 0).toFixed(2)} جنيه</td>
                           </tr>
                         ))
                       ) : (
@@ -746,10 +771,10 @@ export default function Dashboard() {
 
                   {/* Users & Drivers */}
                   <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200">
-                    <div className="text-sm font-semibold text-orange-700 mb-2">المستخدمين والمندوبين</div>
+                    <div className="text-sm font-semibold text-orange-700 mb-2">الزباين والمندوبين</div>
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-orange-600">إجمالي المستخدمين</span>
+                        <span className="text-sm text-orange-600">إجمالي الزباين</span>
                         <span className="font-bold text-orange-800">{analytics.totalUsers}</span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -782,9 +807,9 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'admin-management' && isSuperAdmin && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                <h3 className="text-lg font-black text-green-800 mb-4">إنشاء أدمن جديد</h3>
+            <div className="space-y-4">
+              <div className="bg-white rounded-lg p-5 shadow-sm border border-slate-100">
+                <h3 className="text-lg font-black text-green-800 mb-4">إنشاء موظف جديد</h3>
                 <form onSubmit={handleCreateAdmin} className="grid md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
@@ -792,8 +817,8 @@ export default function Dashboard() {
                       type="text"
                       value={adminName}
                       onChange={(e) => setAdminName(e.target.value)}
-                      placeholder="اسم الأدمن"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      placeholder="اسم الموظف"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                       required
                     />
                   </div>
@@ -804,7 +829,7 @@ export default function Dashboard() {
                       value={adminEmail}
                       onChange={(e) => setAdminEmail(e.target.value)}
                       placeholder="admin@example.com"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                       required
                     />
                   </div>
@@ -815,7 +840,7 @@ export default function Dashboard() {
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                       required
                     />
                   </div>
@@ -824,19 +849,19 @@ export default function Dashboard() {
                     <select
                       value={adminRole}
                       onChange={(e) => setAdminRole(e.target.value as any)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                     >
-                      <option value="admin">أدمن</option>
-                      <option value="super_admin">سوبر أدمن</option>
+                      <option value="admin">موظف</option>
+                      <option value="super_admin">سوبر ادمن</option>
                     </select>
                   </div>
                   <div className="md:col-span-4">
                     <button
                       type="submit"
                       disabled={adminLoading}
-                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold py-3 rounded-xl transition-colors"
+                      className="text-sm bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold px-4 py-2 rounded-lg transition-colors"
                     >
-                      {adminLoading ? 'جاري الإنشاء...' : 'إنشاء الأدمن'}
+                      {adminLoading ? 'جاري الإنشاء...' : 'إنشاء الموظف'}
                     </button>
                   </div>
                 </form>
@@ -844,7 +869,7 @@ export default function Dashboard() {
 
               <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
-                  <h3 className="text-lg font-black text-green-800 mb-4">قائمة الأدمنين</h3>
+                  <h3 className="text-lg font-black text-green-800 mb-4">قائمة الموظفين</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -865,9 +890,9 @@ export default function Dashboard() {
                             <td className="px-4 py-3 text-sm text-slate-600">{admin.email}</td>
                             <td className="px-4 py-3">
                               {admin.role === 'super_admin' ? (
-                                <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-3 py-1 rounded-full">سوبر أدمن</span>
+                                <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-3 py-1 rounded-full">سوبر ادمن</span>
                               ) : (
-                                <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">أدمن</span>
+                                <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">موظف</span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-600">
@@ -888,7 +913,7 @@ export default function Dashboard() {
                       ) : (
                         <tr>
                           <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                            لا يوجد أدمنين
+                            لا يوجد موظفين
                           </td>
                         </tr>
                       )}
@@ -929,7 +954,7 @@ export default function Dashboard() {
                         <option value="driver">المندوبين</option>
                         <option value="order">الطلبات</option>
                         <option value="client">العملاء</option>
-                        <option value="admin">الأدمنين</option>
+                        <option value="admin">الموظفين</option>
                       </select>
                       <select
                         value={logFilterAction}
@@ -983,7 +1008,7 @@ export default function Dashboard() {
                               {log.entity === 'driver' && 'مندوب'}
                               {log.entity === 'order' && 'طلب'}
                               {log.entity === 'client' && 'عميل'}
-                              {log.entity === 'admin' && 'أدمن'}
+                              {log.entity === 'admin' && 'موظف'}
                               {!log.entity && '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-600 max-w-xs truncate">
@@ -1005,14 +1030,45 @@ export default function Dashboard() {
             </div>
           )}
 
+          {activeTab === 'cities' && <CitiesManager />}
+
           {activeTab === 'settings' && (
-            <div className=" w-full gap-4 px-15">
+            <div className="w-full gap-4 px-15">
               <h3 className="text-lg font-black text-green-800 mb-4">الإعدادات</h3>
-              {/* Password Change */}
-              <section className="flex flex-row justify-between">
-                <div className="bg-white w-2/3 rounded-2xl py-6 px-10 shadow-sm border border-slate-100">
+              <section className="flex flex-row gap-4">
+                {/* Settings Grid */}
+                <div className="flex flex-col gap-4">
+                  {/* Pricing Settings */}
+                  <div
+                    onClick={() => navigate('/pricing-settings')}
+                    className="bg-white rounded-lg p-6 shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
+                  >
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="bg-yellow-100 p-3 rounded-xl group-hover:bg-yellow-200 transition-colors">
+                        <DollarSign className="w-6 h-6 text-yellow-600" />
+                      </div>
+                      <h3 className="text-lg font-black text-green-800">تعديل الأسعار والأوزان</h3>
+                    </div>
+                    <p className="text-sm text-slate-500">تحديد الأسعار والأوزان والمسافات لكل مدينة</p>
+                  </div>
+
+                  {/* Social Media Settings */}
+                  <div
+                    className="bg-white rounded-lg p-6 shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
+                  >
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="bg-blue-100 p-3 rounded-xl group-hover:bg-blue-200 transition-colors">
+                        <Share2 className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <h3 className="text-lg font-black text-green-800">روابط السوشيال ميديا</h3>
+                    </div>
+                    <p className="text-sm text-slate-500">إدارة روابط التواصل الاجتماعي</p>
+                  </div>
+                </div>
+                {/* Password Change Form */}
+                <div className="bg-white max-w-md flex-1 rounded-lg px-5 py-4 shadow-sm border border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">تغيير كلمة المرور</h3>
-                  <form onSubmit={handlePasswordChange} className="space-y-4">
+                  <form onSubmit={handlePasswordChange} className="space-y-2">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور الحالية</label>
                       <input
@@ -1020,7 +1076,7 @@ export default function Dashboard() {
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
                         placeholder="أدخل كلمة المرور الحالية"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                         required
                       />
                     </div>
@@ -1031,7 +1087,7 @@ export default function Dashboard() {
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="أدخل كلمة المرور الجديدة"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                         required
                       />
                     </div>
@@ -1042,37 +1098,18 @@ export default function Dashboard() {
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="أعد إدخال كلمة المرور الجديدة"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                         required
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={settingsLoading}
-                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold py-3 rounded-xl transition-colors"
+                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold py-2 rounded-xl transition-colors"
                     >
                       {settingsLoading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
                     </button>
                   </form>
-                </div>
-
-                {/* Account Actions */}
-                <div className="bg-white w-fit h-fit rounded-2xl p-6 shadow-sm border border-slate-100">
-                  <h3 className="text-lg font-black text-green-800 mb-4">إجراءات الحساب</h3>
-                  <div className="space-y-4">
-                    <div className="flex flex-col items-center justify-between p-4 bg-slate-50 rounded-xl gap-4">
-                      <div>
-                        <div className="font-semibold text-slate-900">تسجيل الخروج</div>
-                        <div className="text-sm text-slate-500">تسجيل الخروج من لوحة التحكم</div>
-                      </div>
-                      <button
-                        onClick={handleLogout}
-                        className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                      >
-                        تسجيل الخروج
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </section>
             </div>

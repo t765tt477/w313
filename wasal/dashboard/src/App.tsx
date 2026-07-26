@@ -4,8 +4,10 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ClientDetails from './pages/ClientDetails';
 import DriverDetails from './pages/DriverDetails';
+import PricingSettings from './pages/PricingSettings';
+import RouteTracker from './components/RouteTracker';
 
-function App() {
+function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -26,14 +28,24 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+    <>
+      <RouteTracker />
       <Routes>
         <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} />
         <Route path="/dashboard" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} />
         <Route path="/client/:id" element={isAuthenticated ? <ClientDetails /> : <Navigate to="/login" />} />
         <Route path="/driver/:id" element={isAuthenticated ? <DriverDetails /> : <Navigate to="/login" />} />
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/pricing-settings" element={isAuthenticated ? <PricingSettings /> : <Navigate to="/login" />} />
+        <Route path="/" element={<Navigate to={isAuthenticated ? (localStorage.getItem('lastRoute') || '/dashboard') : '/login'} />} />
       </Routes>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <AppContent />
     </BrowserRouter>
   );
 }

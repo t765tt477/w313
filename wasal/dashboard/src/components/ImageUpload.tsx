@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 interface ImageUploadProps {
-  onImageUpload: (url: string, publicId: string) => void;
+  onImageUpload: (url: string) => void;
   currentImage?: string;
   label?: string;
   accept?: string;
@@ -45,25 +45,7 @@ export default function ImageUpload({
     reader.readAsDataURL(file);
 
     try {
-      const formData = new FormData();
-      formData.append('image', file);
-
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:50000/api/upload/image', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'فشل رفع الصورة');
-      }
-
-      onImageUpload(data.url, data.publicId);
+      onImageUpload(preview as string);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'فشل رفع الصورة');
@@ -75,7 +57,7 @@ export default function ImageUpload({
 
   const handleRemove = () => {
     setPreview(null);
-    onImageUpload('', '');
+    onImageUpload('');
   };
 
   return (
@@ -83,7 +65,7 @@ export default function ImageUpload({
       <label className="block text-sm font-semibold text-slate-700 mb-2">
         {label}
       </label>
-      
+
       <div className="relative">
         {preview ? (
           <div className="relative w-full h-48 rounded-xl overflow-hidden border border-slate-200">
@@ -123,7 +105,7 @@ export default function ImageUpload({
             </p>
           </div>
         )}
-        
+
         <input
           type="file"
           accept={accept}

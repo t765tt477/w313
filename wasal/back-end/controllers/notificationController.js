@@ -1,4 +1,5 @@
 import Notification from '../models/Notification.js';
+import { emitToUser, emitToRole } from '../services/socketService.js';
 
 // Get all notifications for the logged-in admin
 export const getNotifications = async (req, res) => {
@@ -76,18 +77,32 @@ export const deleteNotification = async (req, res) => {
 };
 
 // Create notification (helper function, not exposed as route)
-export const createNotification = async (recipientId, type, title, message, data = {}) => {
+export const createNotification = async (recipientId, type, title, message, data = {}, recipientModel = 'Admin', sound = true) => {
   try {
     const notification = await Notification.create({
       recipient: recipientId,
+      recipientModel,
       type,
       title,
       message,
-      data
+      data,
+      sound
     });
+    emitToUser(recipientId, 'notification:new', notification);
     return notification;
   } catch (error) {
     console.error('Error creating notification:', error);
     return null;
   }
+};
+
+// Broadcast a notification to every currently-connected admin (does not persist
+// per-admin rows - it's a live-only ping used for things like "new order came in").
+export const broadcastToAdmins = (type, title, message, data = {}, sound = true) => {
+  emitToRole('admin', 'notification:new', {
+    type, title, message, data, sound, createdAt: new Date(), isRead: false, isLive: true
+  });
+  emitToRole('super_admin', 'notification:new', {
+    type, title, message, data, sound, createdAt: new Date(), isRead: false, isLive: true
+  });
 };

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Check, Trash2 } from 'lucide-react';
+import { Bell, Check, Trash2, Package, Car, DollarSign, Clipboard, RefreshCw, Timer, AlertTriangle, CheckCircle, ArrowLeft, Flag } from 'lucide-react';
 import { notificationAPI } from '../services/api';
+import { getSocket } from '../services/socket';
+import { playNotificationSound } from '../utils/sound';
 
 interface Notification {
   _id: string;
@@ -9,6 +11,8 @@ interface Notification {
   message: string;
   isRead: boolean;
   createdAt: string;
+  sound?: boolean;
+  isLive?: boolean; // true for live-only pings that were never persisted (e.g. a reassignment ping)
   data?: {
     orderId?: string;
     driverId?: string;
@@ -21,13 +25,51 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [justArrived, setJustArrived] = useState(false); // drives the bell "shake" animation
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchNotifications();
-    // Poll for new notifications every 30 seconds
+    // Poll as a fallback in case the socket connection drops.
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Live notifications over the socket - instant, with sound, no waiting for
+  // the next poll cycle.
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+
+    const socket = getSocket(token);
+
+    const onNotification = (incoming: any) => {
+      if (incoming?.sound) playNotificationSound();
+
+      setJustArrived(true);
+      setTimeout(() => setJustArrived(false), 1000);
+
+      if (incoming?.isLive && !incoming._id) {
+        // Live-only ping (e.g. "order reassigned") - not stored per-admin in
+        // the DB, so give it a local id and surface it transiently at the
+        // top of the list without inflating the persisted unread count.
+        const transient: Notification = { ...incoming, _id: `live-${Date.now()}`, isRead: false };
+        setNotifications((prev) => [transient, ...prev].slice(0, 50));
+        return;
+      }
+
+      // Real, persisted notification meant for this admin.
+      setNotifications((prev) => {
+        if (prev.some((n) => n._id === incoming._id)) return prev; // avoid duplicates
+        return [incoming, ...prev].slice(0, 50);
+      });
+      setUnreadCount((c) => c + 1);
+    };
+
+    socket.on('notification:new', onNotification);
+    return () => {
+      socket.off('notification:new', onNotification);
+    };
   }, []);
 
   useEffect(() => {
@@ -52,12 +94,15 @@ export default function NotificationBell() {
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
+    setNotifications(notifications.map(n =>
+      n._id === notificationId ? { ...n, isRead: true } : n
+    ));
+    setUnreadCount(Math.max(0, unreadCount - 1));
+
+    if (notificationId.startsWith('live-')) return; // transient, nothing to persist
+
     try {
       await notificationAPI.markAsRead(notificationId);
-      setNotifications(notifications.map(n =>
-        n._id === notificationId ? { ...n, isRead: true } : n
-      ));
-      setUnreadCount(Math.max(0, unreadCount - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -74,12 +119,16 @@ export default function NotificationBell() {
   };
 
   const handleDelete = async (notificationId: string) => {
+    const wasUnread = !notifications.find(n => n._id === notificationId)?.isRead;
+    setNotifications(notifications.filter(n => n._id !== notificationId));
+    if (wasUnread) {
+      setUnreadCount(Math.max(0, unreadCount - 1));
+    }
+
+    if (notificationId.startsWith('live-')) return; // transient, nothing to persist
+
     try {
       await notificationAPI.deleteNotification(notificationId);
-      setNotifications(notifications.filter(n => n._id !== notificationId));
-      if (!notifications.find(n => n._id === notificationId)?.isRead) {
-        setUnreadCount(Math.max(0, unreadCount - 1));
-      }
     } catch (error) {
       console.error('Error deleting notification:', error);
     }
@@ -103,15 +152,30 @@ export default function NotificationBell() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'new_order':
-        return '📦';
+        return Package;
       case 'driver_approval':
-        return '🚗';
+        return Car;
       case 'driver_credit':
-        return '💰';
+        return DollarSign;
       case 'order_update':
-        return '📋';
+        return Clipboard;
+      case 'order_offer':
+      case 'order_reassigned':
+        return RefreshCw;
+      case 'order_offer_expired':
+        return Timer;
+      case 'order_no_driver':
+        return AlertTriangle;
+      case 'order_accepted':
+        return CheckCircle;
+      case 'order_rejected':
+        return ArrowLeft;
+      case 'order_picked_up':
+        return Package;
+      case 'order_delivered':
+        return Flag;
       default:
-        return '🔔';
+        return Bell;
     }
   };
 
@@ -119,7 +183,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-1.5 hover:bg-slate-100 rounded-xl transition-colors"
+        className={`relative p-1.5 hover:bg-slate-100 rounded-xl transition-colors ${justArrived ? 'animate-bounce' : ''}`}
       >
         <Bell className="w-6 h-6 text-white" />
         {unreadCount > 0 && (
@@ -160,7 +224,12 @@ export default function NotificationBell() {
                     }`}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl">{getNotificationIcon(notification.type)}</span>
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      {(() => {
+                        const Icon = getNotificationIcon(notification.type);
+                        return <Icon className="w-5 h-5 text-green-600" />;
+                      })()}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <h4 className={`font-semibold text-sm ${!notification.isRead ? 'text-slate-900' : 'text-slate-600'}`}>

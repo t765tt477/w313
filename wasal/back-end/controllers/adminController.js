@@ -47,7 +47,8 @@ export const addDriverCredit = async (req, res) => {
 // Get driver details
 export const getDriverDetails = async (req, res) => {
   try {
-    const driver = await Driver.findById(req.params.id);
+    const driver = await Driver.findById(req.params.id)
+      .select('-password');
 
     if (!driver) {
       return res.status(404).json({ message: 'Driver not found' });
@@ -134,6 +135,51 @@ export const approveDriver = async (req, res) => {
     await driver.save();
 
     res.status(200).json({ message: 'Driver approved successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Update driver images
+export const updateDriverImages = async (req, res) => {
+  try {
+    const { driverId, profileImage, vehicleImage, licenseImage } = req.body;
+
+    if (!driverId) {
+      return res.status(400).json({ message: 'Driver ID is required' });
+    }
+
+    const driver = await Driver.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Update image URLs if provided
+    if (profileImage !== undefined) driver.profileImage = profileImage;
+    if (vehicleImage !== undefined) driver.vehicleImage = vehicleImage;
+    if (licenseImage !== undefined) driver.licenseImage = licenseImage;
+
+    await driver.save();
+
+    // Log the action
+    await createLog(
+      req.user._id,
+      'update',
+      'driver',
+      driver._id,
+      `Updated images for driver ${driver.name}`,
+      req.ip,
+      req.get('user-agent')
+    );
+
+    res.status(200).json({
+      message: 'Images updated successfully',
+      driver: {
+        profileImage: driver.profileImage,
+        vehicleImage: driver.vehicleImage,
+        licenseImage: driver.licenseImage
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

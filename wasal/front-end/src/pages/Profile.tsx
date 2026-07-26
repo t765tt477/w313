@@ -1,5 +1,3 @@
-import { useState } from "react"
-
 interface ProfileProps {
   user: any
   onLogout: () => void
@@ -20,9 +18,20 @@ export default function Profile({ user, onLogout }: ProfileProps) {
         <div className="lg:col-span-1">
           <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
             <div className="flex flex-col items-center text-center mb-6">
-              <div className="w-24 h-24 bg-green-600 rounded-full flex items-center justify-center text-white font-black text-3xl mb-4">
-                {user?.name?.[0] || 'م'}
-              </div>
+              {user?.profileImage ? (
+                <img
+                  src={user.profileImage}
+                  alt="Profile"
+                  className="w-24 h-24 rounded-full object-cover mb-4"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-24 h-24 bg-green-600 rounded-full flex items-center justify-center text-white font-black text-3xl mb-4">
+                  {user?.name?.[0] || 'م'}
+                </div>
+              )}
               <h3 className="font-black text-slate-900 text-lg">{user?.name || 'غير معروف'}</h3>
               <p className="text-sm text-slate-500 mt-1">{user?.email || ''}</p>
               <p className="text-sm text-slate-500">{user?.phone || ''}</p>
