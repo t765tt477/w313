@@ -4,6 +4,7 @@ import {
   getConversations,
   getOrCreateSupportConversation,
   getOrCreateOrderConversation,
+  getOrCreateConversationWithUser,
   getMessages,
   sendMessage,
   markConversationRead
@@ -16,6 +17,7 @@ router.use(protect);
 router.get('/', getConversations);
 router.post('/support', getOrCreateSupportConversation);
 router.post('/order/:orderId', getOrCreateOrderConversation);
+router.post('/admin/:userId', getOrCreateConversationWithUser);
 router.get('/:id/messages', getMessages);
 router.post('/:id/messages', sendMessage);
 router.put('/:id/read', markConversationRead);

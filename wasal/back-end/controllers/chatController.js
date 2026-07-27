@@ -199,6 +199,49 @@ export const getOrCreateOrderConversation = async (req, res) => {
   }
 };
 
+// POST /api/chats/admin/:userId - get or create a support conversation with a specific user (admin only)
+export const getOrCreateConversationWithUser = async (req, res) => {
+  try {
+    const actor = getActorInfo(req.user);
+    if (!isAdminActor(actor)) {
+      return res.status(403).json({ message: 'غير مصرح لك بهذا الإجراء' });
+    }
+
+    const { userId } = req.params;
+    const { model } = req.body; // 'Client' or 'Driver'
+
+    if (!model || !['Client', 'Driver'].includes(model)) {
+      return res.status(400).json({ message: 'نوع المستخدم غير صالح' });
+    }
+
+    // Import models dynamically to avoid circular dependencies
+    const UserModel = model === 'Client' ? (await import('../models/Client.js')).default : (await import('../models/Driver.js')).default;
+    const targetUser = await UserModel.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'المستخدم غير موجود' });
+    }
+
+    let conversation = await Conversation.findOne({
+      type: 'support',
+      'participants.user': userId
+    });
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        type: 'support',
+        participants: [
+          { user: userId, model, role: model === 'Client' ? 'client' : 'driver' }
+        ]
+      });
+    }
+
+    conversation = await populateParticipants(Conversation.findById(conversation._id));
+    res.status(200).json({ conversation });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // GET /api/chats/:id/messages
 export const getMessages = async (req, res) => {
   try {

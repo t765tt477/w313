@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, Send, Package, Headphones, User as UserIcon, Car } from 'lucide-react';
+import { MessageCircle, Send, Package, Headphones, User as UserIcon, Car, Search, Filter } from 'lucide-react';
 import { chatAPI } from '../services/api';
 import { getSocket } from '../services/socket';
 import { playNotificationSound } from '../utils/sound';
@@ -40,7 +40,11 @@ const conversationTitle = (conv: Conversation) => {
   return others.map((p) => (typeof p.user === 'object' ? p.user.name : '')).join(' \u2194 ');
 };
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  initialConversationId?: string | null;
+}
+
+export default function ChatPanel({ initialConversationId }: ChatPanelProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -49,6 +53,8 @@ export default function ChatPanel() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [filter, setFilter] = useState<'all' | 'support' | 'order'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
@@ -64,6 +70,13 @@ export default function ChatPanel() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  // Handle initial conversation ID from navigation
+  useEffect(() => {
+    if (initialConversationId) {
+      openConversation(initialConversationId);
+    }
+  }, [initialConversationId]);
 
   const openConversation = (id: string) => {
     setActiveId(id);
@@ -144,7 +157,29 @@ export default function ChatPanel() {
     }
   };
 
-  const filtered = conversations.filter((c) => filter === 'all' || c.type === filter);
+  const filtered = conversations.filter((c) => {
+    // Filter by type (support/order)
+    if (filter !== 'all' && c.type !== filter) return false;
+
+    // Filter by unread status
+    if (showUnreadOnly && !c.unread) return false;
+
+    // Filter by search query (email or phone)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const others = otherParticipants(c);
+      const matchesSearch = others.some((p) => {
+        if (typeof p.user === 'object') {
+          return (p.user.email?.toLowerCase().includes(query) ||
+            (p.user as any).phone?.includes(query));
+        }
+        return false;
+      });
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
   const activeConversation = conversations.find((c) => c._id === activeId) || null;
 
   return (
@@ -157,7 +192,7 @@ export default function ChatPanel() {
               <MessageCircle className="w-5 h-5 text-green-600" />
               الدردشة الداخلية
             </h2>
-            <div className="flex gap-1">
+            <div className="flex gap-1 mb-2">
               {(['all', 'support', 'order'] as const).map((f) => (
                 <button
                   key={f}
@@ -168,6 +203,25 @@ export default function ChatPanel() {
                 </button>
               ))}
             </div>
+            {/* Search by email/phone */}
+            <div className="relative mb-2">
+              <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="بحث بالبريد أو الهاتف..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            {/* Unread filter */}
+            <button
+              onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+              className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${showUnreadOnly ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              <Filter className="w-3 h-3" />
+              {showUnreadOnly ? 'الكل' : 'غير مقروء فقط'}
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {loadingList ? (
@@ -198,7 +252,7 @@ export default function ChatPanel() {
         </div>
 
         {/* Thread */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-auto">
           {!activeConversation ? (
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
               اختر محادثة من القائمة لعرضها

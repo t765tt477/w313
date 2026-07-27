@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { adminAPI, logAPI } from '../services/api';
 import CitiesManager from '../components/CitiesManager';
 import ChatPanel from '../components/ChatPanel';
@@ -58,6 +58,7 @@ interface Client {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -90,6 +91,7 @@ export default function Dashboard() {
   const [logFilterType, setLogFilterType] = useState<'all' | 'driver' | 'order' | 'client' | 'admin'>('all');
   const [logFilterAction, setLogFilterAction] = useState<'all' | 'create' | 'update' | 'delete' | 'login' | 'logout'>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [initialConversationId, setInitialConversationId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -101,7 +103,15 @@ export default function Dashboard() {
     if (userStr) {
       setCurrentUser(JSON.parse(userStr));
     }
-  }, []);
+
+    // Handle navigation from client/driver details pages to open chat
+    if (location.state?.openChat && location.state?.conversationId) {
+      setInitialConversationId(location.state.conversationId);
+      setActiveTab('chat');
+      // Clear the state to prevent reopening on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const fetchData = async () => {
     try {
@@ -1033,7 +1043,7 @@ export default function Dashboard() {
 
           {activeTab === 'cities' && <CitiesManager />}
 
-          {activeTab === 'chat' && <ChatPanel />}
+          {activeTab === 'chat' && <ChatPanel initialConversationId={initialConversationId} />}
 
           {activeTab === 'settings' && (
             <div className="w-full gap-4 px-15">

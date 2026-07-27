@@ -53,6 +53,8 @@ export const chatAPI = {
   getMessages: (conversationId: string) => api.get(`/chats/${conversationId}/messages`),
   sendMessage: (conversationId: string, text: string) => api.post(`/chats/${conversationId}/messages`, { text }),
   markRead: (conversationId: string) => api.put(`/chats/${conversationId}/read`),
+  createConversationWithUser: (userId: string, model: 'Client' | 'Driver') =>
+    api.post(`/chats/admin/${userId}`, { model }),
 };
 
 export const notificationAPI = {

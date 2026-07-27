@@ -195,7 +195,7 @@ export default function ChatWidget({ token, user, currentOrder }: ChatWidgetProp
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           {!activeConversation ? (
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
               اختر محادثة من القائمة
