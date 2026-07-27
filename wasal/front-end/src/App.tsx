@@ -684,13 +684,13 @@ export default function App() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => setActiveView("client")}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-8 py-3.5 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
+                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-8 py-2 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
                     >
                       أرسل طلبًا الآن
                     </button>
                     <button
                       onClick={() => setActiveView("driver")}
-                      className="bg-white/15 backdrop-blur-sm hover:bg-white/25 text-white font-semibold px-8 py-3.5 rounded-2xl border border-white/30 transition-all text-base"
+                      className="bg-white/15 backdrop-blur-sm hover:bg-white/25 text-white font-semibold px-8 py-2 rounded-2xl border border-white/30 transition-all text-base"
                     >
                       انضم كمندوب
                     </button>
@@ -869,8 +869,8 @@ export default function App() {
 
       {/* ─── CLIENT APP ─── */}
       {activeView === "client" && (
-        <div className="top-spacing max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-          <div className="mb-8">
+        <div className="top-spacing pb-6">
+          <div className="mb-6 px-4">
             <h1 className="text-sm font-black text-slate-900">تطبيق الزبون</h1>
             <p className="text-slate-500 mt-1">
               أنشئ وتابع طلبات التوصيل بسهولة
@@ -891,12 +891,12 @@ export default function App() {
           ) : !token ? (
             <>
               {/* Tab toggle */}
-              <div className="inline-flex bg-slate-100 rounded-xl p-1 mb-8 gap-1">
+              <div className="inline-flex bg-slate-100 rounded-xl p-1 mb-4 md:mb-6 gap-1">
                 {(["login", "register"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
-                    className={`px-6 py-3 rounded-lg text-sm font-semibold transition-all ${activeTab === t
+                    className={`px-6 py-1.5 md:py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === t
                       ? "bg-white shadow text-green-700"
                       : "text-slate-500"
                       }`}
@@ -1205,9 +1205,9 @@ export default function App() {
           ) : (
             <div className="grid lg:grid-cols-5 gap-8">
               {/* Order creation */}
-              <div className="lg:col-span-5 space-y-6">
+              <div className="lg:col-span-5 space-y-4">
                 {/* New order */}
-                <div className="bg-white border border-slate-100 rounded-2xl shadow-sm py-6">
+                <div className="bg-white border border-slate-100 pt-2 pb-6">
                   <h2 className="text-sm font-black text-slate-900 mb-6 px-4">
                     إنشاء طلب توصيل جديد
                   </h2>
@@ -1301,7 +1301,7 @@ export default function App() {
                     <button
                       onClick={handleCreateOrder}
                       disabled={loading}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 rounded-xl transition-colors disabled:opacity-50"
                     >
                       {loading ? 'جاري إنشاء الطلب...' : 'إنشاء الطلب'}
                     </button>
@@ -1473,12 +1473,12 @@ export default function App() {
           ) : !token ? (
             <>
               {/* Tab toggle */}
-              <div className="inline-flex bg-slate-100 rounded-xl p-1 mb-8 gap-1">
+              <div className="inline-flex bg-slate-100 rounded-xl p-1 mb-5 md:mb-6 gap-1">
                 {(["login", "register"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
-                    className={`px-6 py-3 rounded-lg text-sm font-semibold transition-all ${activeTab === t
+                    className={`px-6 py-1.5 md:py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === t
                       ? "bg-white shadow text-green-700"
                       : "text-slate-500"
                       }`}
@@ -1509,7 +1509,7 @@ export default function App() {
                               placeholder="05XXXXXXXX أو name@email.com"
                               value={loginForm.email}
                               onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                              className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
                             />
                           </div>
                           <div>
@@ -1524,7 +1524,7 @@ export default function App() {
                                 placeholder="••••••••"
                                 value={loginForm.password}
                                 onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
                               />
                               <button
                                 type="button"
@@ -1543,7 +1543,7 @@ export default function App() {
                           <button
                             onClick={handleLogin}
                             disabled={loading}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 md:py-3 rounded-xl transition-colors disabled:opacity-50"
                           >
                             {loading ? 'جاري الدخول...' : 'دخول'}
                           </button>
@@ -1580,7 +1580,7 @@ export default function App() {
                                   placeholder="name@email.com"
                                   value={forgotPasswordForm.email}
                                   onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                                  className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
                                 />
                               </div>
                               {message && (
@@ -1591,7 +1591,7 @@ export default function App() {
                               <button
                                 onClick={handleForgotPassword}
                                 disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                               >
                                 {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
                               </button>
@@ -1616,7 +1616,7 @@ export default function App() {
                                   placeholder="123456"
                                   value={forgotPasswordForm.otp}
                                   onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
+                                  className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
                                   maxLength={6}
                                 />
                               </div>
@@ -1632,7 +1632,7 @@ export default function App() {
                                     placeholder="••••••••"
                                     value={forgotPasswordForm.newPassword}
                                     onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value })}
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
                                   />
                                   <button
                                     type="button"
@@ -1651,14 +1651,14 @@ export default function App() {
                               <button
                                 onClick={handleResetPassword}
                                 disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                               >
                                 {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
                               </button>
                               <button
                                 onClick={handleResendForgotPasswordOTP}
                                 disabled={loading}
-                                className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                                className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                               >
                                 {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
                               </button>
@@ -1682,7 +1682,7 @@ export default function App() {
                             {
                               label: "الاسم الكامل",
                               type: "text",
-                              ph: "عبدالرحمن محمد الغامدي",
+                              ph: " ابراهيم النعيم بليله ",
                               key: "name"
                             },
                             { label: "رقم الهاتف", type: "tel", ph: "09XXXXXXXX", key: "phone" },
@@ -1807,7 +1807,7 @@ export default function App() {
                       <button
                         onClick={() => handleUpdateDriverOrderStatus('picked_up')}
                         disabled={loading}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
                       >
                         {loading ? '...' : 'تم استلام الطرد'}
                       </button>
@@ -1816,7 +1816,7 @@ export default function App() {
                       <button
                         onClick={() => handleUpdateDriverOrderStatus('delivered')}
                         disabled={loading}
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
                       >
                         {loading ? '...' : 'تم تسليم الطلب'}
                       </button>
@@ -1866,7 +1866,7 @@ export default function App() {
                       <button
                         onClick={handleToggleAvailability}
                         disabled={!driverProfile.isApproved || driverProfile.isSuspended}
-                        className={`px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-40 ${isDriverAvailable
+                        className={`px-6 py-2 rounded-xl font-bold transition-colors disabled:opacity-40 ${isDriverAvailable
                           ? 'bg-green-600 hover:bg-green-700 text-white'
                           : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
                           }`}
@@ -2020,7 +2020,7 @@ export default function App() {
                           {[
                             {
                               label: "الاسم الكامل",
-                              ph: "عبدالرحمن محمد الغامدي",
+                              ph: "ابراهيم النعيم بليله",
                               type: "text",
                               key: "name"
                             },
@@ -2089,7 +2089,7 @@ export default function App() {
                             setMessage('')
                             setDriverStep(2)
                           }}
-                          className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
+                          className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
                         >
                           التالي ←
                         </button>
@@ -2147,13 +2147,13 @@ export default function App() {
                         <div className="flex gap-3 mt-6">
                           <button
                             onClick={() => setDriverStep(1)}
-                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
                           >
                             → السابق
                           </button>
                           <button
                             onClick={() => setDriverStep(3)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
                           >
                             التالي ←
                           </button>
@@ -2196,13 +2196,13 @@ export default function App() {
                         <div className="flex gap-3 mt-6">
                           <button
                             onClick={() => setDriverStep(2)}
-                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
                           >
                             → السابق
                           </button>
                           <button
                             onClick={() => setDriverStep(4)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
                           >
                             التالي ←
                           </button>
@@ -2266,14 +2266,14 @@ export default function App() {
                         <div className="flex gap-3">
                           <button
                             onClick={() => setDriverStep(3)}
-                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
                           >
                             → السابق
                           </button>
                           <button
                             onClick={handleDriverRegister}
                             disabled={loading}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                           >
                             {loading ? 'جاري الإرسال...' : 'إرسال الطلب ✓'}
                           </button>
@@ -2352,7 +2352,7 @@ export default function App() {
                       placeholder="123456"
                       value={otpForm.otp}
                       onChange={(e) => setOtpForm({ ...otpForm, otp: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
                       maxLength={6}
                     />
                   </div>
@@ -2364,14 +2364,14 @@ export default function App() {
                   <button
                     onClick={handleVerifyOTP}
                     disabled={loading}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                   >
                     {loading ? 'جاري التحقق...' : 'تحقق من الرمز'}
                   </button>
                   <button
                     onClick={handleResendOTP}
                     disabled={loading}
-                    className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                    className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                   >
                     {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
                   </button>

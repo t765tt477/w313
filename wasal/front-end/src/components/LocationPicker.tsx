@@ -176,15 +176,15 @@ export default function LocationPicker({
               placeholder="ابحث عن عنوان..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
-              className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-right"
+              className="w-full px-4 py-1.5 pr-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-right"
               dir="rtl"
             />
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           </div>
           <button
             onClick={handleGetCurrentLocation}
             disabled={locating}
-            className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-1.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             title="تحديد موقعي الحالي"
           >
             {locating ? (
@@ -202,7 +202,7 @@ export default function LocationPicker({
               <button
                 key={index}
                 onClick={() => handleSelectSearchResult(result)}
-                className="w-full px-4 py-3 text-right hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
+                className="w-full px-4 py-1.5 text-right hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
               >
                 <div className="text-sm font-medium text-gray-800">{result.display_name}</div>
               </button>

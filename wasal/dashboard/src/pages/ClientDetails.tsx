@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { adminAPI } from '../services/api';
+import { adminAPI, chatAPI } from '../services/api';
 import DashboardLayout from '../components/DashboardLayout';
-import { Mail, Phone, MapPin, ShoppingBag, DollarSign, Edit, Trash2, Save, X } from 'lucide-react';
+import { Mail, Phone, MapPin, ShoppingBag, DollarSign, Edit, Trash2, Save, X, MessageCircle } from 'lucide-react';
 
 interface Client {
   _id: string;
@@ -98,6 +98,17 @@ export default function ClientDetails() {
     }
   };
 
+  const handleStartChat = async () => {
+    if (!client) return;
+    try {
+      const response = await chatAPI.createConversationWithUser(client._id, 'Client');
+      const conversationId = response.data.conversation._id;
+      navigate('/dashboard', { state: { openChat: true, conversationId } });
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'فشل فتح المحادثة');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -121,9 +132,10 @@ export default function ClientDetails() {
         <div className="flex gap-2">
           {!isEditing ? (
             <>
+
               <button
                 onClick={handleEdit}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1.5 px-4 rounded-lg transition-colors"
               >
                 <Edit className="w-4 h-4" />
                 تعديل
@@ -245,6 +257,14 @@ export default function ClientDetails() {
                     <div className="text-sm text-slate-500 mb-1">العنوان</div>
                     <div className="text-base text-slate-800">{client.address || 'غير متوفر'}</div>
                   </div>
+                </div>
+                <div>             <button
+                  onClick={handleStartChat}
+                  className="flex items-center gap-2 bg-green-400 hover:bg-green-700 text-white font-semibold px-2 py-1 rounded-lg transition-colors"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  دردشة
+                </button>
                 </div>
               </>
             )}

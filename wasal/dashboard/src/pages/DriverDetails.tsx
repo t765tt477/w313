@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { adminAPI } from '../services/api';
+import { adminAPI, chatAPI } from '../services/api';
 import DashboardLayout from '../components/DashboardLayout';
-import { Mail, Phone, MapPin, Truck, DollarSign, Star, CheckCircle, Clock, Edit, Trash2, Save, X, Link, User } from 'lucide-react';
+import { Mail, Phone, MapPin, Truck, DollarSign, Star, CheckCircle, Clock, Edit, Trash2, Save, X, Link, User, MessageCircle } from 'lucide-react';
 
 interface Driver {
   _id: string;
@@ -40,6 +40,7 @@ export default function DriverDetails() {
     vehicleNumber: ''
   });
   const [updatingImages, setUpdatingImages] = useState(false);
+  const [isEditingImages, setIsEditingImages] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState('');
   const [vehicleImageUrl, setVehicleImageUrl] = useState('');
   const [licenseImageUrl, setLicenseImageUrl] = useState('');
@@ -148,10 +149,33 @@ export default function DriverDetails() {
       setProfileImageUrl('');
       setVehicleImageUrl('');
       setLicenseImageUrl('');
+      setIsEditingImages(false);
     } catch (error: any) {
       alert(error.response?.data?.message || 'فشل تحديث الصور');
     } finally {
       setUpdatingImages(false);
+    }
+  };
+
+  const handleStartEditImages = () => {
+    setIsEditingImages(true);
+  };
+
+  const handleCancelEditImages = () => {
+    setIsEditingImages(false);
+    setProfileImageUrl('');
+    setVehicleImageUrl('');
+    setLicenseImageUrl('');
+  };
+
+  const handleStartChat = async () => {
+    if (!driver) return;
+    try {
+      const response = await chatAPI.createConversationWithUser(driver._id, 'Driver');
+      const conversationId = response.data.conversation._id;
+      navigate('/dashboard', { state: { openChat: true, conversationId } });
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'فشل فتح المحادثة');
     }
   };
 
@@ -178,16 +202,17 @@ export default function DriverDetails() {
         <div className="flex gap-2">
           {!isEditing ? (
             <>
+
               <button
                 onClick={handleEdit}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
               >
                 <Edit className="w-4 h-4" />
                 تعديل
               </button>
               <button
                 onClick={handleDelete}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
                 حذف
@@ -197,14 +222,14 @@ export default function DriverDetails() {
             <>
               <button
                 onClick={handleSaveEdit}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
               >
                 <Save className="w-4 h-4" />
                 حفظ
               </button>
               <button
                 onClick={handleCancelEdit}
-                className="flex items-center gap-2 bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-slate-600 hover:bg-slate-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
               >
                 <X className="w-4 h-4" />
                 إلغاء
@@ -221,6 +246,19 @@ export default function DriverDetails() {
 
           {/* Images Section */}
           <div className="space-y-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-700">الصور</h3>
+              {!isEditingImages && (
+                <button
+                  onClick={handleStartEditImages}
+                  className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 p-1 rounded-lg transition-colors"
+                >
+                  <Edit className="w-3 h-3" />
+                  تعديل الصور
+                </button>
+              )}
+            </div>
+
             {/* Profile Image */}
             <div className="flex flex-col items-center">
               <h3 className="text-sm font-semibold text-slate-700 mb-3">صورة الملف الشخصي</h3>
@@ -238,75 +276,92 @@ export default function DriverDetails() {
                   <User className="w-12 h-12 text-green-600" />
                 </div>
               )}
-              <input
-                type="text"
-                value={profileImageUrl}
-                onChange={(e) => setProfileImageUrl(e.target.value)}
-                placeholder="رابط صورة الملف الشخصي"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
-              />
-            </div>
-
-            {/* Vehicle Image */}
-            <div className="flex flex-col items-center">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">صورة المركبة</h3>
-              {driver.vehicleImage ? (
-                <img
-                  src={driver.vehicleImage}
-                  alt="Vehicle"
-                  className="w-32 h-24 rounded-lg object-cover mb-3 border-2 border-green-100"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
+              {isEditingImages && (
+                <input
+                  type="text"
+                  value={profileImageUrl}
+                  onChange={(e) => setProfileImageUrl(e.target.value)}
+                  placeholder="رابط صورة الملف الشخصي"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
                 />
-              ) : (
-                <div className="w-32 h-24 bg-green-100 rounded-lg flex items-center justify-center mb-3">
-                  <Truck className="w-12 h-12 text-green-600" />
-                </div>
               )}
-              <input
-                type="text"
-                value={vehicleImageUrl}
-                onChange={(e) => setVehicleImageUrl(e.target.value)}
-                placeholder="رابط صورة المركبة"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
-              />
             </div>
+            <section className="flex flex-row gap-4 justify-center">
+              {/* Vehicle Image */}
+              <div className="flex flex-col items-center">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">صورة المركبة</h3>
+                {driver.vehicleImage ? (
+                  <img
+                    src={driver.vehicleImage}
+                    alt="Vehicle"
+                    className="w-32 h-24 rounded-lg object-cover mb-3 border-2 border-green-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-32 h-24 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+                    <Truck className="w-12 h-12 text-green-600" />
+                  </div>
+                )}
+                {isEditingImages && (
+                  <input
+                    type="text"
+                    value={vehicleImageUrl}
+                    onChange={(e) => setVehicleImageUrl(e.target.value)}
+                    placeholder="رابط صورة المركبة"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
+                  />
+                )}
+              </div>
 
-            {/* License Image */}
-            <div className="flex flex-col items-center">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">صورة الرخصة</h3>
-              {driver.licenseImage ? (
-                <img
-                  src={driver.licenseImage}
-                  alt="License"
-                  className="w-32 h-24 rounded-lg object-cover mb-3 border-2 border-green-100"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <div className="w-32 h-24 bg-green-100 rounded-lg flex items-center justify-center mb-3">
-                  <User className="w-12 h-12 text-green-600" />
-                </div>
-              )}
-              <input
-                type="text"
-                value={licenseImageUrl}
-                onChange={(e) => setLicenseImageUrl(e.target.value)}
-                placeholder="رابط صورة الرخصة"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
-              />
-            </div>
-
-            <button
-              onClick={handleImagesUpdate}
-              disabled={updatingImages || (!profileImageUrl && !vehicleImageUrl && !licenseImageUrl)}
-              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Link className="w-4 h-4" />
-              {updatingImages ? 'جاري التحديث...' : 'تحديث الصور'}
-            </button>
+              {/* License Image */}
+              <div className="flex flex-col items-center">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">صورة الرخصة</h3>
+                {driver.licenseImage ? (
+                  <img
+                    src={driver.licenseImage}
+                    alt="License"
+                    className="w-32 h-24 rounded-lg object-cover mb-3 border-2 border-green-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-32 h-24 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+                    <User className="w-12 h-12 text-green-600" />
+                  </div>
+                )}
+                {isEditingImages && (
+                  <input
+                    type="text"
+                    value={licenseImageUrl}
+                    onChange={(e) => setLicenseImageUrl(e.target.value)}
+                    placeholder="رابط صورة الرخصة"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
+                  />
+                )}
+              </div>
+            </section>
+            {isEditingImages && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleImagesUpdate}
+                  disabled={updatingImages || (!profileImageUrl && !vehicleImageUrl && !licenseImageUrl)}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <Link className="w-4 h-4" />
+                  {updatingImages ? 'جاري التحديث...' : 'تحديث الصور'}
+                </button>
+                <button
+                  onClick={handleCancelEditImages}
+                  className="flex-1 bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  إلغاء
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -412,6 +467,15 @@ export default function DriverDetails() {
                     <div className="text-base text-slate-800">{driver.vehicleNumber || 'غير متوفر'}</div>
                   </div>
                 </div>
+                <div>
+                  <button
+                    onClick={handleStartChat}
+                    className="flex items-center gap-2 bg-green-400 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded-lg transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    دردشة
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -428,7 +492,7 @@ export default function DriverDetails() {
               </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">الرصيد الحالي</div>
-                <div className="text-2xl font-black text-green-600">{(driver.balance || 0).toFixed(2)} جنيه</div>
+                <div className="text-lg font-black text-green-600">{(driver.balance || 0).toFixed(2)} جنيه</div>
               </div>
             </div>
 
@@ -438,7 +502,7 @@ export default function DriverDetails() {
               </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">إجمالي الأرباح</div>
-                <div className="text-2xl font-black text-green-600">{(driver.totalEarnings || 0).toFixed(2)} جنيه</div>
+                <div className="text-lg font-black text-green-600">{(driver.totalEarnings || 0).toFixed(2)} جنيه</div>
               </div>
             </div>
 
@@ -448,7 +512,7 @@ export default function DriverDetails() {
               </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">إجمالي التوصيلات</div>
-                <div className="text-2xl font-black text-green-600">{driver.totalDeliveries || 0}</div>
+                <div className="text-lg font-black text-green-600">{driver.totalDeliveries || 0}</div>
               </div>
             </div>
 
@@ -458,7 +522,7 @@ export default function DriverDetails() {
               </div>
               <div>
                 <div className="text-sm text-slate-500 mb-1">التقييم</div>
-                <div className="text-2xl font-black text-green-600">{(driver.rating || 0).toFixed(1)} ⭐</div>
+                <div className="text-lg font-black text-green-600">{(driver.rating || 0).toFixed(1)} ⭐</div>
               </div>
             </div>
           </div>
