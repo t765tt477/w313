@@ -21,7 +21,8 @@ const staticAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 const productionOrigins = [
   'https://wasal-control-panel.vercel.app',
   'https://wasal-client.vercel.app',
-  'https://wasalsd.vercel.app'
+  'https://wasalsd.vercel.app',
+  'https://wasal-wheat.vercel.app'
 ];
 
 const allowedOrigins = [...staticAllowedOrigins, ...productionOrigins];
