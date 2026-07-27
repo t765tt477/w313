@@ -891,7 +891,7 @@ export default function App() {
           ) : !token ? (
             <>
               {/* Tab toggle */}
-              <div className="inline-flex bg-slate-100 rounded-xl p-1 mb-4 md:mb-6 gap-1">
+              <div className="inline-flex bg-slate-100 rounded-xl p-1 pr-4 mb-4 md:mb-6 gap-1">
                 {(["login", "register"] as const).map((t) => (
                   <button
                     key={t}
