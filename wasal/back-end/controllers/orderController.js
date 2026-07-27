@@ -42,7 +42,7 @@ export const createOrder = async (req, res) => {
     broadcastToAdmins(
       'new_order',
       'طلب جديد',
-      `طلب توصيل جديد من ${order.client?.name || 'عميل'} بقيمة ${totalPrice.toFixed(2)} جنيه`,
+      `طلب توصيل جديد من ${order.client?.name || 'زبون'} بقيمة ${totalPrice.toFixed(2)} جنيه`,
       { orderId: order._id }
     );
 
@@ -80,8 +80,8 @@ export const getOrderById = async (req, res) => {
     }
 
     // Check if user owns the order or is the driver
-    if (order.client._id.toString() !== req.user.id && 
-        (!order.driver || order.driver.user?.toString() !== req.user.id)) {
+    if (order.client._id.toString() !== req.user.id &&
+      (!order.driver || order.driver.user?.toString() !== req.user.id)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -141,7 +141,7 @@ export const rateOrder = async (req, res) => {
     // Update driver rating
     const Driver = (await import('../models/Driver.js')).default;
     const driver = await Driver.findById(order.driver);
-    
+
     const totalRating = driver.rating * driver.ratingCount + rating;
     driver.ratingCount += 1;
     driver.rating = totalRating / driver.ratingCount;

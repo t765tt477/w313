@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI, logAPI } from '../services/api';
 import CitiesManager from '../components/CitiesManager';
+import ChatPanel from '../components/ChatPanel';
 import Sidebar from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
 import { Search, RefreshCw, Settings, DollarSign, Lock, Share2 } from 'lucide-react';
@@ -65,7 +66,7 @@ export default function Dashboard() {
   const [creditAmount, setCreditAmount] = useState('');
   const [creditDescription, setCreditDescription] = useState('');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs' | 'cities'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs' | 'cities' | 'chat'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'approved' | 'pending'>('all');
@@ -1007,7 +1008,7 @@ export default function Dashboard() {
                             <td className="px-4 py-3 text-sm text-slate-600">
                               {log.entity === 'driver' && 'مندوب'}
                               {log.entity === 'order' && 'طلب'}
-                              {log.entity === 'client' && 'عميل'}
+                              {log.entity === 'client' && 'زبون'}
                               {log.entity === 'admin' && 'موظف'}
                               {!log.entity && '-'}
                             </td>
@@ -1031,6 +1032,8 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'cities' && <CitiesManager />}
+
+          {activeTab === 'chat' && <ChatPanel />}
 
           {activeTab === 'settings' && (
             <div className="w-full gap-4 px-15">

@@ -2,13 +2,14 @@ import { useState, useEffect } from "react"
 import { Car, MapPin } from "lucide-react"
 import About from "./pages/About"
 import Profile from "./pages/Profile"
+import ChatWidget from "./components/ChatWidget"
 import LocationPicker from "./components/LocationPicker"
 import RouteMap from "./components/RouteMap"
 import { authAPI, orderAPI, driverAPI, cityAPI } from "./services/api"
 import { getSocket, disconnectSocket } from "./services/socket"
 import { playNotificationSound, playIncomingOrderSound } from "./utils/sound"
 
-type View = "landing" | "client" | "driver" | "about" | "profile" | "otp"
+type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat"
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>("landing")
@@ -564,6 +565,7 @@ export default function App() {
                   { id: "driver" as View, label: "تطبيق المندوب" },
                 ] : []),
                 { id: "about" as View, label: "عن وصل" },
+                ...(token ? [{ id: "chat" as View, label: "الدردشة" }] : []),
                 ...(token ? [{ id: "profile" as View, label: "البروفايل" }] : []),
               ].map((item) => (
                 <button
@@ -854,6 +856,13 @@ export default function App() {
 
       {/* ─── ABOUT PAGE ─── */}
       {activeView === "about" && <About />}
+
+      {/* ─── CHAT PAGE ─── */}
+      {activeView === "chat" && token && (
+        <div className="top-spacing pb-10">
+          <ChatWidget token={token} user={user} currentOrder={currentOrder} />
+        </div>
+      )}
 
       {/* ─── PROFILE PAGE ─── */}
       {activeView === "profile" && <Profile user={user} onLogout={handleLogout} />}
@@ -1453,7 +1462,7 @@ export default function App() {
           {token && user?.role === 'client' ? (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
               <h2 className="text-lg font-black text-red-800 mb-2">عفواً، هذه الصفحة للمندوبين فقط</h2>
-              <p className="text-red-600 mb-4">أنت مسجل دخول كعميل. يرجى استخدام تطبيق الزبون.</p>
+              <p className="text-red-600 mb-4">أنت مسجل دخول كزبون. يرجى استخدام تطبيق الزبون.</p>
               <button
                 onClick={() => setActiveView('client')}
                 className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
@@ -2381,7 +2390,7 @@ export default function App() {
 
       {/* ─── MOBILE BOTTOM NAV ─── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-green-500/40 border-t border-green-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] h-12">
-        <div className={`grid h-12 ${token ? 'grid-cols-3' : 'grid-cols-4'}`}>
+        <div className="grid h-12 grid-cols-4">
           {[
             {
               id: "landing" as View,
@@ -2437,6 +2446,19 @@ export default function App() {
                 </svg>
               ),
             },
+            ...(token ? [{
+              id: "chat" as View,
+              label: "الدردشة",
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-5 h-5"
+                  fill="currentColor"
+                >
+                  <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+                </svg>
+              ),
+            }] : []),
             ...(token ? [{
               id: "profile" as View,
               label: "البروفايل",

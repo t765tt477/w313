@@ -48,6 +48,13 @@ export const logAPI = {
   getLogById: (id: string) => api.get(`/logs/${id}`),
 };
 
+export const chatAPI = {
+  getConversations: (type?: 'support' | 'order') => api.get('/chats', { params: type ? { type } : undefined }),
+  getMessages: (conversationId: string) => api.get(`/chats/${conversationId}/messages`),
+  sendMessage: (conversationId: string, text: string) => api.post(`/chats/${conversationId}/messages`, { text }),
+  markRead: (conversationId: string) => api.put(`/chats/${conversationId}/read`),
+};
+
 export const notificationAPI = {
   getNotifications: () => api.get('/notifications'),
   markAsRead: (notificationId: string) => api.put(`/notifications/${notificationId}/read`),

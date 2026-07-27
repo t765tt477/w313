@@ -53,4 +53,13 @@ export const userAPI = {
   changePassword: (data: any) => api.put('/users/change-password', data),
 };
 
+export const chatAPI = {
+  getConversations: () => api.get('/chats'),
+  getSupportConversation: () => api.post('/chats/support'),
+  getOrderConversation: (orderId: string) => api.post(`/chats/order/${orderId}`),
+  getMessages: (conversationId: string) => api.get(`/chats/${conversationId}/messages`),
+  sendMessage: (conversationId: string, text: string) => api.post(`/chats/${conversationId}/messages`, { text }),
+  markRead: (conversationId: string) => api.put(`/chats/${conversationId}/read`),
+};
+
 export default api;

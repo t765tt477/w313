@@ -36,7 +36,7 @@ export default function Profile({ user, onLogout }: ProfileProps) {
               <p className="text-sm text-slate-500 mt-1">{user?.email || ''}</p>
               <p className="text-sm text-slate-500">{user?.phone || ''}</p>
               <span className="mt-3 bg-green-100 text-green-700 font-semibold text-xs px-3 py-1 rounded-full">
-                {user?.role === 'driver' ? 'مندوب' : 'عميل'}
+                {user?.role === 'driver' ? 'مندوب' : 'زبون'}
               </span>
             </div>
 

@@ -4,6 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import http from 'http';
 import { initSocket } from './services/socketService.js';
+import { verifyEmailTransport } from './services/emailService.js';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ const connectDB = async () => {
 };
 
 connectDB();
+verifyEmailTransport();
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -62,6 +64,7 @@ import adminRoutes from './routes/admin.js';
 import notificationRoutes from './routes/notifications.js';
 import logRoutes from './routes/logs.js';
 import cityRoutes from './routes/cities.js';
+import chatRoutes from './routes/chat.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -71,6 +74,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/cities', cityRoutes);
+app.use('/api/chats', chatRoutes);
 
 // Root route
 app.get('/', (req, res) => {
