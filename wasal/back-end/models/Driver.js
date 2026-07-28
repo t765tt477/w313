@@ -33,6 +33,14 @@ const driverSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  nationalIdImage: {
+    type: String,
+    default: null
+  },
+  inspectionCertificateImage: {
+    type: String,
+    default: null
+  },
   vehicleType: {
     type: String,
     enum: ['car', 'motorcycle', 'bicycle'],
@@ -41,6 +49,30 @@ const driverSchema = new mongoose.Schema({
   vehicleNumber: {
     type: String,
     required: true
+  },
+  vehicleModel: {
+    type: String,
+    default: ''
+  },
+  vehicleYear: {
+    type: String,
+    default: ''
+  },
+  vehicleColor: {
+    type: String,
+    default: ''
+  },
+  chassisNumber: {
+    type: String,
+    default: ''
+  },
+  nationalId: {
+    type: String,
+    default: ''
+  },
+  birthDate: {
+    type: Date,
+    default: null
   },
   licenseNumber: {
     type: String,

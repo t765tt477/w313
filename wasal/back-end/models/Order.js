@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
 const orderSchema = new mongoose.Schema({
+  orderNumber: {
+    type: String,
+    unique: true,
+    required: false
+  },
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',
@@ -87,13 +92,39 @@ const orderSchema = new mongoose.Schema({
     default: 'pending'
   },
   notes: String,
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: null
+  },
+  ratedAt: Date,
   createdAt: {
     type: Date,
     default: Date.now
   },
   acceptedAt: Date,
   pickedUpAt: Date,
-  deliveredAt: Date
+  deliveredAt: Date,
+  cancelledAt: Date,
+  cancelReason: {
+    type: String,
+    enum: ['client', 'timeout', 'no_drivers'],
+    default: null
+  }
+});
+
+// Generate order number before saving
+orderSchema.pre('save', async function (next) {
+  if (!this.orderNumber) {
+    const count = await mongoose.model('Order').countDocuments();
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const sequence = (count + 1).toString().padStart(4, '0');
+    this.orderNumber = `ORD${year}${month}${sequence}`;
+  }
+  next();
 });
 
 export default mongoose.model('Order', orderSchema);

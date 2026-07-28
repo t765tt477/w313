@@ -6,13 +6,15 @@ import { emitToUser } from '../services/socketService.js';
 // Update driver profile
 export const updateDriverProfile = async (req, res) => {
   try {
-    const { vehicleImage, licenseImage, name, phone } = req.body;
+    // Document/vehicle images are managed ONLY by admins through the control panel
+    // (see adminController.updateDriverImages) - a driver cannot set these themselves.
+    const { name, phone } = req.body;
 
     const driver = await Driver.findByIdAndUpdate(
       req.user.id,
-      { vehicleImage, licenseImage, name, phone },
+      { name, phone },
       { new: true, runValidators: true }
-    ).select('name email phone profileImage vehicleType vehicleNumber vehicleImage licenseImage isAvailable');
+    ).select('name email phone profileImage vehicleType vehicleNumber vehicleImage licenseImage nationalIdImage inspectionCertificateImage isAvailable');
 
     if (!driver) {
       return res.status(404).json({ message: 'Driver profile not found' });
@@ -28,7 +30,7 @@ export const updateDriverProfile = async (req, res) => {
 export const getDriverProfile = async (req, res) => {
   try {
     const driver = await Driver.findById(req.user.id)
-      .select('name email phone profileImage vehicleType vehicleNumber vehicleImage licenseImage isAvailable balance totalEarnings totalDeliveries rating ratingCount isApproved');
+      .select('name email phone profileImage vehicleType vehicleNumber vehicleImage licenseImage nationalIdImage inspectionCertificateImage isAvailable balance totalEarnings totalDeliveries rating ratingCount isApproved');
 
     if (!driver) {
       return res.status(404).json({ message: 'Driver profile not found' });

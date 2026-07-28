@@ -140,10 +140,10 @@ export const approveDriver = async (req, res) => {
   }
 };
 
-// Update driver images
+// Update driver images / document links (admin only - the ONLY place these are set)
 export const updateDriverImages = async (req, res) => {
   try {
-    const { driverId, profileImage, vehicleImage, licenseImage } = req.body;
+    const { driverId, profileImage, vehicleImage, licenseImage, nationalIdImage, inspectionCertificateImage } = req.body;
 
     if (!driverId) {
       return res.status(400).json({ message: 'Driver ID is required' });
@@ -154,10 +154,12 @@ export const updateDriverImages = async (req, res) => {
       return res.status(404).json({ message: 'Driver not found' });
     }
 
-    // Update image URLs if provided
+    // Update image/document URLs if provided
     if (profileImage !== undefined) driver.profileImage = profileImage;
     if (vehicleImage !== undefined) driver.vehicleImage = vehicleImage;
     if (licenseImage !== undefined) driver.licenseImage = licenseImage;
+    if (nationalIdImage !== undefined) driver.nationalIdImage = nationalIdImage;
+    if (inspectionCertificateImage !== undefined) driver.inspectionCertificateImage = inspectionCertificateImage;
 
     await driver.save();
 
@@ -177,9 +179,54 @@ export const updateDriverImages = async (req, res) => {
       driver: {
         profileImage: driver.profileImage,
         vehicleImage: driver.vehicleImage,
-        licenseImage: driver.licenseImage
+        licenseImage: driver.licenseImage,
+        nationalIdImage: driver.nationalIdImage,
+        inspectionCertificateImage: driver.inspectionCertificateImage
       }
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Change own password (any admin/staff member, i.e. admin or super_admin)
+export const changeMyPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'يرجى إدخال كلمة المرور الحالية والجديدة' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل' });
+    }
+
+    // Only ever touches the authenticated admin's own record - never other data.
+    const admin = await Admin.findById(req.user.id).select('+password');
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, admin.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ message: 'كلمة المرور الحالية غير صحيحة' });
+    }
+
+    admin.password = await bcrypt.hash(newPassword, 10);
+    await admin.save();
+
+    // Log the action
+    await createLog(
+      req.user._id,
+      'update',
+      'admin',
+      admin._id,
+      `Changed password for admin ${admin.name} (${admin.email})`,
+      req.ip,
+      req.get('user-agent')
+    );
+
+    res.status(200).json({ message: 'تم تغيير كلمة المرور بنجاح' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

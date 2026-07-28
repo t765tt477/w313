@@ -190,8 +190,8 @@ export default function Dashboard() {
 
     setSettingsLoading(true);
     try {
-      // Note: This would need a backend API endpoint for password change
-      // For now, we'll simulate it
+      // Only currentPassword/newPassword are sent - no other account data is touched.
+      await adminAPI.changePassword({ currentPassword, newPassword });
       alert('تم تغيير كلمة المرور بنجاح');
       setCurrentPassword('');
       setNewPassword('');

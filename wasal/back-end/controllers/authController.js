@@ -7,6 +7,7 @@ import Client from '../models/Client.js';
 import City from '../models/City.js';
 import { createLog } from './logController.js';
 import { sendOTPEmail } from '../services/emailService.js';
+import { broadcastToAdmins } from './notificationController.js';
 
 // Generate OTP
 const generateOTP = () => {
@@ -92,13 +93,29 @@ export const register = async (req, res) => {
         password: hashedPassword,
         city: cityDoc._id,
         vehicleType: req.body.vehicleType || 'motorcycle',
-        vehicleNumber: req.body.vehicleNumber || '',
+        // Front-end sends the plate number as `plateNumber`; fall back to `vehicleNumber`
+        // for any older/direct API callers that still use that name.
+        vehicleNumber: req.body.plateNumber || req.body.vehicleNumber || '',
         licenseNumber: req.body.licenseNumber || '',
+        vehicleModel: req.body.vehicleModel || '',
+        vehicleYear: req.body.vehicleYear || '',
+        vehicleColor: req.body.vehicleColor || '',
+        chassisNumber: req.body.chassisNumber || '',
+        nationalId: req.body.nationalId || '',
+        birthDate: req.body.birthDate || null,
         otp: {
           code: otp,
           expiresAt: otpExpiresAt
         }
       });
+
+      // Send notification to admins about new driver registration
+      broadcastToAdmins(
+        'driver_approval',
+        'طلب تسجيل مندوب جديد',
+        `مندوب جديد: ${name} - ${phone}`,
+        { driverId: user._id }
+      );
     } else {
       // Client
       const existingClient = await Client.findOne({ $or: [{ email }, { phone }] });
@@ -379,10 +396,10 @@ export const getMe = async (req, res) => {
     let user;
     user = await Admin.findById(req.user.id);
     if (!user) {
-      user = await Driver.findById(req.user.id);
+      user = await Driver.findById(req.user.id).populate('city', 'name');
     }
     if (!user) {
-      user = await Client.findById(req.user.id);
+      user = await Client.findById(req.user.id).populate('city', 'name');
     }
 
     if (!user) {

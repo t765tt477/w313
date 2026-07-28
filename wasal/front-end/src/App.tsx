@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Car, MapPin } from "lucide-react"
+import { Car, MapPin, Eye, EyeOff } from "lucide-react"
 import About from "./pages/About"
 import Profile from "./pages/Profile"
 import ChatWidget from "./components/ChatWidget"
@@ -9,7 +9,7 @@ import { authAPI, orderAPI, driverAPI, cityAPI } from "./services/api"
 import { getSocket, disconnectSocket } from "./services/socket"
 import { playNotificationSound, playIncomingOrderSound } from "./utils/sound"
 
-type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat"
+type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat" | "driver-pending"
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>("landing")
@@ -25,6 +25,9 @@ export default function App() {
   // Orders state
   const [orders, setOrders] = useState<any[]>([])
   const [currentOrder, setCurrentOrder] = useState<any>(null)
+  const [ratingValue, setRatingValue] = useState(0)
+  const [ratingHover, setRatingHover] = useState(0)
+  const [ratingSubmitting, setRatingSubmitting] = useState(false)
 
   // Driver state
   const [driverProfile, setDriverProfile] = useState<any>(null)
@@ -55,12 +58,20 @@ export default function App() {
   const [showDriverPassword, setShowDriverPassword] = useState(false)
   const [showDriverConfirmPassword, setShowDriverConfirmPassword] = useState(false)
   const [forgotPasswordStep, setForgotPasswordStep] = useState<'email' | 'otp' | 'reset'>('email')
+  const [loginErrors, setLoginErrors] = useState({ email: '', password: '' })
+  const [registerErrors, setRegisterErrors] = useState({ name: '', phone: '', email: '', password: '', confirmPassword: '', city: '' })
+  const [forgotPasswordErrors, setForgotPasswordErrors] = useState({ email: '', otp: '', newPassword: '' })
+  const [driverErrors, setDriverErrors] = useState({
+    name: '', phone: '', email: '', nationalId: '', birthDate: '', city: '', password: '', confirmPassword: '',
+    vehicleType: '', plateNumber: '', vehicleModel: '', vehicleYear: '', vehicleColor: '', chassisNumber: '', licenseNumber: ''
+  })
   const [pendingUserId, setPendingUserId] = useState<string | null>(null)
   const [pendingRole, setPendingRole] = useState<string | null>(null)
   const [driverForm, setDriverForm] = useState({
     name: '', phone: '', email: '', password: '', confirmPassword: '', nationalId: '', birthDate: '', city: '',
-    vehicleType: 'motorcycle', plateNumber: '', vehicleModel: '', vehicleYear: '', vehicleColor: '', chassisNumber: ''
+    vehicleType: 'motorcycle', plateNumber: '', vehicleModel: '', vehicleYear: '', vehicleColor: '', chassisNumber: '', licenseNumber: ''
   })
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [cities, setCities] = useState<{ _id: string; name: string }[]>([])
   const [orderForm, setOrderForm] = useState({ weight: 3, size: '1' })
   const [loading, setLoading] = useState(false)
@@ -121,6 +132,17 @@ export default function App() {
       } catch { /* ignore */ }
     }
 
+    // Order timeout - auto-cancelled due to no available drivers
+    const onOrderTimeout = async (payload: any) => {
+      if (payload?.sound) playNotificationSound()
+      setMessage(payload?.message || 'عذراً، لم يتم العثور على مندوب متاح في الوقت المحدد. يرجى المحاولة مرة أخرى بعد قليل.')
+      try {
+        const res = await orderAPI.getOrderById(payload.orderId)
+        setCurrentOrder((prev: any) => prev && prev._id === payload.orderId ? res.data.order : prev)
+        setOrders((prev) => prev.map((o) => o._id === payload.orderId ? res.data.order : o))
+      } catch { /* ignore */ }
+    }
+
     // Live driver GPS position, relayed to whichever client is tracking that order.
     const onDriverLocation = (payload: any) => {
       setTrackedDriverPosition({ lat: payload.lat, lng: payload.lng })
@@ -130,6 +152,7 @@ export default function App() {
     socket.on('order:new_offer', onNewOffer)
     socket.on('order:accepted', onOrderAccepted)
     socket.on('order:status_changed', onStatusChanged)
+    socket.on('order:timeout', onOrderTimeout)
     socket.on('driver:location', onDriverLocation)
 
     return () => {
@@ -137,6 +160,7 @@ export default function App() {
       socket.off('order:new_offer', onNewOffer)
       socket.off('order:accepted', onOrderAccepted)
       socket.off('order:status_changed', onStatusChanged)
+      socket.off('order:timeout', onOrderTimeout)
       socket.off('driver:location', onDriverLocation)
     }
   }, [token])
@@ -255,6 +279,12 @@ export default function App() {
 
   // Auth handlers
   const handleLogin = async () => {
+    const errors = { email: '', password: '' }
+    if (!loginForm.email.trim()) errors.email = 'املء الحقل'
+    if (!loginForm.password.trim()) errors.password = 'املء الحقل'
+    setLoginErrors(errors)
+    if (errors.email || errors.password) return
+
     setLoading(true)
     try {
       const res = await authAPI.login(loginForm.email, loginForm.password)
@@ -275,22 +305,18 @@ export default function App() {
   }
 
   const handleRegister = async () => {
-    if (!registerForm.name.trim() || !registerForm.phone.trim() || !registerForm.email.trim()) {
-      setMessage('يرجى تعبئة جميع الحقول')
-      return
-    }
-    if (!registerForm.city) {
-      setMessage('يرجى اختيار المدينة')
-      return
-    }
-    if (registerForm.password.length < 6) {
-      setMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل')
-      return
-    }
-    if (registerForm.password !== registerForm.confirmPassword) {
-      setMessage('كلمتي المرور غير متطابقين')
-      return
-    }
+    const errors = { name: '', phone: '', email: '', password: '', confirmPassword: '', city: '' }
+    if (!registerForm.name.trim()) errors.name = 'املء الحقل'
+    if (!registerForm.phone.trim()) errors.phone = 'املء الحقل'
+    if (!registerForm.email.trim()) errors.email = 'املء الحقل'
+    if (!registerForm.city) errors.city = 'املء الحقل'
+    if (!registerForm.password) errors.password = 'املء الحقل'
+    else if (registerForm.password.length < 6) errors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'
+    if (!registerForm.confirmPassword) errors.confirmPassword = 'املء الحقل'
+    else if (registerForm.password !== registerForm.confirmPassword) errors.confirmPassword = 'كلمتي المرور غير متطابقين'
+    setRegisterErrors(errors)
+    if (Object.values(errors).some(e => e)) return
+
     setLoading(true)
     try {
       const { confirmPassword, ...payload } = registerForm
@@ -327,7 +353,8 @@ export default function App() {
 
       // Redirect based on user role
       if (res.data.user.role === 'driver') {
-        setActiveView('driver')
+        setAgreedToTerms(false)
+        setActiveView('driver-pending')
       } else {
         setActiveView('client')
       }
@@ -384,6 +411,8 @@ export default function App() {
       })
       setCurrentOrder(res.data.order)
       setOrders([res.data.order, ...orders])
+      setRatingValue(0)
+      setRatingHover(0)
       setMessage('تم إنشاء الطلب بنجاح')
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إنشاء الطلب')
@@ -421,23 +450,87 @@ export default function App() {
 
   const priceEstimate = calculatePrice()
 
+  const handleRateOrder = async (orderId: string) => {
+    if (ratingValue < 1 || ratingValue > 5) {
+      setMessage('يرجى اختيار عدد النجوم أولاً')
+      return
+    }
+    setRatingSubmitting(true)
+    try {
+      const res = await orderAPI.rateOrder(orderId, ratingValue)
+      setCurrentOrder((prev: any) => prev && prev._id === orderId
+        ? { ...prev, rating: res.data.rating ?? ratingValue }
+        : prev)
+      setOrders((prev) => prev.map((o) => o._id === orderId ? { ...o, rating: res.data.rating ?? ratingValue } : o))
+      setMessage('شكرًا لتقييمك، تم حفظه بنجاح')
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'تعذر إرسال التقييم')
+    }
+    setRatingSubmitting(false)
+  }
+
+  const handleCancelOrder = async () => {
+    if (!currentOrder) return
+    setLoading(true)
+    try {
+      const res = await orderAPI.cancelOrder(currentOrder._id, { reason: 'client' })
+      setCurrentOrder(res.data.order)
+      setOrders((prev) => prev.map((o) => o._id === res.data.order._id ? res.data.order : o))
+      setMessage('تم إلغاء الطلب بنجاح')
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'تعذر إلغاء الطلب')
+    }
+    setLoading(false)
+  }
+
+  const handleReorder = () => {
+    if (!currentOrder) return
+    // Restore the order data to the form
+    setPickupLocation(currentOrder.pickupLocation)
+    setDeliveryLocation(currentOrder.deliveryLocation)
+    setOrderForm({
+      weight: currentOrder.packageDetails?.weight || 3,
+      size: currentOrder.packageDetails?.size === 'small' ? '1' : currentOrder.packageDetails?.size === 'medium' ? '2' : '3'
+    })
+    setCurrentOrder(null)
+    setMessage('تم استعادة بيانات الطلب، يمكنك تعديلها وإرسالها مرة أخرى')
+  }
+
   // Driver handlers
   const handleDriverRegister = async () => {
-    if (!driverForm.city) {
-      setMessage('يرجى اختيار مدينة الإقامة')
-      return
+    const errors = {
+      name: '', phone: '', email: '', nationalId: '', birthDate: '', city: '', password: '', confirmPassword: '',
+      vehicleType: '', plateNumber: '', vehicleModel: '', vehicleYear: '', vehicleColor: '', chassisNumber: '', licenseNumber: ''
     }
-    if (driverForm.password.length < 6) {
-      setMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل')
-      return
-    }
-    if (driverForm.password !== driverForm.confirmPassword) {
-      setMessage('كلمة المرور وتأكيدها غير متطابقين')
+    if (!driverForm.name.trim()) errors.name = 'املء الحقل'
+    if (!driverForm.phone.trim()) errors.phone = 'املء الحقل'
+    if (!driverForm.email.trim()) errors.email = 'املء الحقل'
+    if (!driverForm.nationalId.trim()) errors.nationalId = 'املء الحقل'
+    if (!driverForm.birthDate) errors.birthDate = 'املء الحقل'
+    if (!driverForm.city) errors.city = 'املء الحقل'
+    if (!driverForm.vehicleType) errors.vehicleType = 'املء الحقل'
+    if (!driverForm.plateNumber.trim()) errors.plateNumber = 'املء الحقل'
+    if (!driverForm.vehicleModel.trim()) errors.vehicleModel = 'املء الحقل'
+    if (!driverForm.vehicleYear.trim()) errors.vehicleYear = 'املء الحقل'
+    if (!driverForm.vehicleColor.trim()) errors.vehicleColor = 'املء الحقل'
+    if (!driverForm.chassisNumber.trim()) errors.chassisNumber = 'املء الحقل'
+    if (!driverForm.licenseNumber.trim()) errors.licenseNumber = 'املء الحقل'
+    if (!driverForm.password) errors.password = 'املء الحقل'
+    else if (driverForm.password.length < 6) errors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'
+    if (!driverForm.confirmPassword) errors.confirmPassword = 'املء الحقل'
+    else if (driverForm.password !== driverForm.confirmPassword) errors.confirmPassword = 'كلمتي المرور غير متطابقين'
+
+    setDriverErrors(errors)
+    if (Object.values(errors).some(e => e)) return
+
+    if (!agreedToTerms) {
+      setMessage('يجب الموافقة على شروط وسياسات التسجيل قبل إرسال الطلب')
       return
     }
     setLoading(true)
     try {
       const { confirmPassword, ...payload } = driverForm
+      console.log('Sending driver registration data:', { ...payload, role: 'driver' })
       const res = await authAPI.register({
         ...payload,
         role: 'driver'
@@ -447,6 +540,7 @@ export default function App() {
       setMessage('تم إرسال طلب التسجيل بنجاح. يرجى التحقق من OTP.')
       setActiveView('otp')
     } catch (error: any) {
+      console.error('Driver registration error:', error.response?.data)
       setMessage(error.response?.data?.message || 'فشل إرسال الطلب')
     }
     setLoading(false)
@@ -501,6 +595,11 @@ export default function App() {
 
   // Forgot Password handlers
   const handleForgotPassword = async () => {
+    const errors = { email: '', otp: '', newPassword: '' }
+    if (!forgotPasswordForm.email.trim()) errors.email = 'املء الحقل'
+    setForgotPasswordErrors(errors)
+    if (errors.email) return
+
     setLoading(true)
     try {
       await authAPI.forgotPassword(forgotPasswordForm.email)
@@ -522,6 +621,13 @@ export default function App() {
   }
 
   const handleResetPassword = async () => {
+    const errors = { email: '', otp: '', newPassword: '' }
+    if (!forgotPasswordForm.otp.trim()) errors.otp = 'املء الحقل'
+    if (!forgotPasswordForm.newPassword) errors.newPassword = 'املء الحقل'
+    else if (forgotPasswordForm.newPassword.length < 6) errors.newPassword = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'
+    setForgotPasswordErrors(errors)
+    if (errors.otp || errors.newPassword) return
+
     setLoading(true)
     try {
       const res = await authAPI.resetPassword({
@@ -684,13 +790,13 @@ export default function App() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => setActiveView("client")}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-8 py-2 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
+                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-8 py-3 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
                     >
                       أرسل طلبًا الآن
                     </button>
                     <button
                       onClick={() => setActiveView("driver")}
-                      className="bg-white/15 backdrop-blur-sm hover:bg-white/25 text-white font-semibold px-8 py-2 rounded-2xl border border-white/30 transition-all text-base"
+                      className="bg-white/15 backdrop-blur-sm hover:bg-white/25 text-white font-semibold px-8 py-3 rounded-2xl border border-white/30 transition-all text-base"
                     >
                       انضم كمندوب
                     </button>
@@ -870,7 +976,7 @@ export default function App() {
       {/* ─── CLIENT APP ─── */}
       {activeView === "client" && (
         <div className="top-spacing pb-6">
-          <div className="mb-6 px-4">
+          <div className="mb-6 px-4 md:px-8">
             <h1 className="text-sm font-black text-slate-900">تطبيق الزبون</h1>
             <p className="text-slate-500 mt-1">
               أنشئ وتابع طلبات التوصيل بسهولة
@@ -889,14 +995,14 @@ export default function App() {
               </button>
             </div>
           ) : !token ? (
-            <>
+            <section>
               {/* Tab toggle */}
-              <div className="inline-flex bg-slate-100 rounded-xl p-1 pr-4 mb-4 md:mb-6 gap-1">
+              <div className="flex flex-row w-fit bg-slate-100 rounded-xl p-1 mb-4 md:mb-6 mx-auto gap-1">
                 {(["login", "register"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
-                    className={`px-6 py-1.5 md:py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === t
+                    className={`px-6 py-2 md:py-3 rounded-lg text-sm font-semibold transition-all ${activeTab === t
                       ? "bg-white shadow text-green-700"
                       : "text-slate-500"
                       }`}
@@ -906,302 +1012,318 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="grid lg:grid-cols-5 gap-8">
-                {/* Auth form */}
-                <div className="lg:col-span-2">
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                    {activeTab === "login" ? (
-                      <>
-                        <h2 className="text-sm font-black text-slate-900 mb-6">
-                          أهلًا بعودتك 👋
-                        </h2>
-                        <div className="space-y-4">
-                          <div>
-                            <label htmlFor="login-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                              رقم الهاتف أو البريد الإلكتروني
-                            </label>
+              {/* Auth form */}
+              <div className="max-w-2xl px-4 mx-auto">
+                <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4 mx-auto">
+                  {activeTab === "login" ? (
+                    <>
+                      <h2 className="text-sm font-black text-slate-900 mb-6">
+                        أهلًا بعودتك 👋
+                      </h2>
+                      <div className="space-y-4">
+                        <div>
+                          <label htmlFor="login-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                            رقم الهاتف أو البريد الإلكتروني
+                          </label>
+                          <input
+                            id="login-email-2"
+                            name="login-email-2"
+                            type="text"
+                            placeholder="09XXXXXXXX أو xxx@email.com"
+                            value={loginForm.email}
+                            onChange={(e) => { setLoginForm({ ...loginForm, email: e.target.value }); setLoginErrors({ ...loginErrors, email: '' }) }}
+                            required
+                            className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${loginErrors.email ? 'border-red-500' : 'border-slate-200'}`}
+                          />
+                          {loginErrors.email && <p className="text-red-500 text-xs mt-1">{loginErrors.email}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="login-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                            كلمة المرور
+                          </label>
+                          <div className="relative">
                             <input
-                              id="login-email-2"
-                              name="login-email-2"
-                              type="text"
-                              placeholder="05XXXXXXXX أو name@email.com"
-                              value={loginForm.email}
-                              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                              id="login-password-2"
+                              name="login-password-2"
+                              type={showPassword ? "text" : "password"}
+                              placeholder="••••••••"
+                              value={loginForm.password}
+                              onChange={(e) => { setLoginForm({ ...loginForm, password: e.target.value }); setLoginErrors({ ...loginErrors, password: '' }) }}
+                              required
+                              className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${loginErrors.password ? 'border-red-500' : 'border-slate-200'}`}
                             />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                           </div>
-                          <div>
-                            <label htmlFor="login-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                              كلمة المرور
-                            </label>
-                            <div className="relative">
-                              <input
-                                id="login-password-2"
-                                name="login-password-2"
-                                type={showPassword ? "text" : "password"}
-                                placeholder="••••••••"
-                                value={loginForm.password}
-                                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                              >
-                                {showPassword ? '👁️' : '👁️‍🗨️'}
-                              </button>
-                            </div>
+                          {loginErrors.password && <p className="text-red-500 text-xs mt-1">{loginErrors.password}</p>}
+                        </div>
+                        {message && (
+                          <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-red-400'}`}>
+                            {message}
                           </div>
-                          {message && (
-                            <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-red-400'}`}>
-                              {message}
-                            </div>
-                          )}
-                          <button
-                            onClick={handleLogin}
-                            disabled={loading}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
-                          >
-                            {loading ? 'جاري الدخول...' : 'دخول'}
-                          </button>
-                          <button
-                            onClick={() => setActiveTab("register")}
-                            className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                          >
-                            ليس لديك حساب؟ سجّل الآن
-                          </button>
-                          <button
-                            onClick={() => { setForgotPasswordStep('email'); setActiveTab('forgot-password') }}
-                            className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                          >
-                            نسيت كلمة المرور؟
-                          </button>
-                        </div>
-                      </>
-                    ) : activeTab === "forgot-password" ? (
-                      <>
-                        <h2 className="text-sm font-black text-slate-900 mb-6">
-                          استرجاع كلمة المرور
-                        </h2>
-                        <div className="space-y-4">
-                          {forgotPasswordStep === 'email' && (
-                            <>
-                              <div>
-                                <label htmlFor="forgot-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                                  البريد الإلكتروني
-                                </label>
-                                <input
-                                  id="forgot-email-2"
-                                  name="forgot-email-2"
-                                  type="email"
-                                  placeholder="name@email.com"
-                                  value={forgotPasswordForm.email}
-                                  onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
-                                />
-                              </div>
-                              {message && (
-                                <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                                  {message}
-                                </div>
-                              )}
-                              <button
-                                onClick={handleForgotPassword}
-                                disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
-                              >
-                                {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
-                              </button>
-                              <button
-                                onClick={() => setActiveTab('login')}
-                                className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                              >
-                                العودة لتسجيل الدخول
-                              </button>
-                            </>
-                          )}
-                          {forgotPasswordStep === 'otp' && (
-                            <>
-                              <div>
-                                <label htmlFor="forgot-otp-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                                  رمز التحقق (6 أرقام)
-                                </label>
-                                <input
-                                  id="forgot-otp-2"
-                                  name="forgot-otp-2"
-                                  type="text"
-                                  placeholder="123456"
-                                  value={forgotPasswordForm.otp}
-                                  onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
-                                  maxLength={6}
-                                />
-                              </div>
-                              <div>
-                                <label htmlFor="forgot-new-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                                  كلمة المرور الجديدة
-                                </label>
-                                <div className="relative">
-                                  <input
-                                    id="forgot-new-password-2"
-                                    name="forgot-new-password-2"
-                                    type={showNewPassword ? "text" : "password"}
-                                    placeholder="••••••••"
-                                    value={forgotPasswordForm.newPassword}
-                                    onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value })}
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowNewPassword(!showNewPassword)}
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                  >
-                                    {showNewPassword ? '👁️' : '👁️‍🗨️'}
-                                  </button>
-                                </div>
-                              </div>
-                              {message && (
-                                <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                                  {message}
-                                </div>
-                              )}
-                              <button
-                                onClick={handleResetPassword}
-                                disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
-                              >
-                                {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
-                              </button>
-                              <button
-                                onClick={handleResendForgotPasswordOTP}
-                                disabled={loading}
-                                className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
-                              >
-                                {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
-                              </button>
-                              <button
-                                onClick={() => setForgotPasswordStep('email')}
-                                className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                              >
-                                العودة
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <h2 className="text-base font-black text-slate-900 mb-6">
-                          أنشئ حسابك مجانًا
-                        </h2>
-                        <div className="space-y-4">
-                          {[
-                            {
-                              label: "الاسم الكامل",
-                              type: "text",
-                              ph: "محمد عبدالله الأحمد",
-                              key: "name"
-                            },
-                            { label: "رقم الهاتف", type: "tel", ph: "05XXXXXXXX", key: "phone" },
-                            {
-                              label: "البريد الإلكتروني",
-                              type: "email",
-                              ph: "name@email.com",
-                              key: "email"
-                            },
-                            {
-                              label: "كلمة المرور",
-                              type: "password",
-                              ph: "••••••••",
-                              key: "password",
-                              visible: showPassword,
-                              toggleVisible: () => setShowPassword(!showPassword)
-                            },
-                            {
-                              label: "تأكيد كلمة المرور",
-                              type: "password",
-                              ph: "••••••••",
-                              key: "confirmPassword",
-                              visible: showConfirmPassword,
-                              toggleVisible: () => setShowConfirmPassword(!showConfirmPassword)
-                            },
-                          ].map((f) => (
-                            <div key={f.key}>
-                              <label htmlFor={`register-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
-                                {f.label}
+                        )}
+                        <button
+                          onClick={handleLogin}
+                          disabled={loading}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          {loading ? 'جاري الدخول...' : 'دخول'}
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("register")}
+                          className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                        >
+                          ليس لديك حساب؟ سجّل الآن
+                        </button>
+                        <button
+                          onClick={() => { setForgotPasswordStep('email'); setActiveTab('forgot-password') }}
+                          className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                        >
+                          نسيت كلمة المرور؟
+                        </button>
+                      </div>
+                    </>
+                  ) : activeTab === "forgot-password" ? (
+                    <>
+                      <h2 className="text-sm font-black text-slate-900 mb-6">
+                        استرجاع كلمة المرور
+                      </h2>
+                      <div className="space-y-4">
+                        {forgotPasswordStep === 'email' && (
+                          <>
+                            <div>
+                              <label htmlFor="forgot-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                                البريد الإلكتروني
                               </label>
-                              {f.type === "password" ? (
-                                <div className="relative">
-                                  <input
-                                    id={`register-${f.key}`}
-                                    name={`register-${f.key}`}
-                                    type={f.visible ? "text" : "password"}
-                                    placeholder={f.ph}
-                                    value={registerForm[f.key as keyof typeof registerForm]}
-                                    onChange={(e) => setRegisterForm({ ...registerForm, [f.key]: e.target.value })}
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={f.toggleVisible}
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                  >
-                                    {f.visible ? '👁️' : '👁️‍🗨️'}
-                                  </button>
-                                </div>
-                              ) : (
+                              <input
+                                id="forgot-email-2"
+                                name="forgot-email-2"
+                                type="email"
+                                placeholder="name@email.com"
+                                value={forgotPasswordForm.email}
+                                onChange={(e) => { setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value }); setForgotPasswordErrors({ ...forgotPasswordErrors, email: '' }) }}
+                                required
+                                className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${forgotPasswordErrors.email ? 'border-red-500' : 'border-slate-200'}`}
+                              />
+                              {forgotPasswordErrors.email && <p className="text-red-500 text-xs mt-1">{forgotPasswordErrors.email}</p>}
+                            </div>
+                            {message && (
+                              <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                                {message}
+                              </div>
+                            )}
+                            <button
+                              onClick={handleForgotPassword}
+                              disabled={loading}
+                              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
+                            </button>
+                            <button
+                              onClick={() => setActiveTab('login')}
+                              className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                            >
+                              العودة لتسجيل الدخول
+                            </button>
+                          </>
+                        )}
+                        {forgotPasswordStep === 'otp' && (
+                          <>
+                            <div>
+                              <label htmlFor="forgot-otp-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                                رمز التحقق (6 أرقام)
+                              </label>
+                              <input
+                                id="forgot-otp-2"
+                                name="forgot-otp-2"
+                                type="text"
+                                placeholder="123456"
+                                value={forgotPasswordForm.otp}
+                                onChange={(e) => { setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value }); setForgotPasswordErrors({ ...forgotPasswordErrors, otp: '' }) }}
+                                required
+                                className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest ${forgotPasswordErrors.otp ? 'border-red-500' : 'border-slate-200'}`}
+                                maxLength={6}
+                              />
+                              {forgotPasswordErrors.otp && <p className="text-red-500 text-xs mt-1">{forgotPasswordErrors.otp}</p>}
+                            </div>
+                            <div>
+                              <label htmlFor="forgot-new-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                                كلمة المرور الجديدة
+                              </label>
+                              <div className="relative">
+                                <input
+                                  id="forgot-new-password-2"
+                                  name="forgot-new-password-2"
+                                  type={showNewPassword ? "text" : "password"}
+                                  placeholder="••••••••"
+                                  value={forgotPasswordForm.newPassword}
+                                  onChange={(e) => { setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value }); setForgotPasswordErrors({ ...forgotPasswordErrors, newPassword: '' }) }}
+                                  required
+                                  minLength={6}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${forgotPasswordErrors.newPassword ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowNewPassword(!showNewPassword)}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                              </div>
+                              {forgotPasswordErrors.newPassword && <p className="text-red-500 text-xs mt-1">{forgotPasswordErrors.newPassword}</p>}
+                            </div>
+                            {message && (
+                              <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                                {message}
+                              </div>
+                            )}
+                            <button
+                              onClick={handleResetPassword}
+                              disabled={loading}
+                              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
+                            </button>
+                            <button
+                              onClick={handleResendForgotPasswordOTP}
+                              disabled={loading}
+                              className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
+                            </button>
+                            <button
+                              onClick={() => setForgotPasswordStep('email')}
+                              className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                            >
+                              العودة
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-base font-black text-slate-900 mb-6">
+                        أنشئ حسابك
+                      </h2>
+                      <div className="space-y-4">
+                        {[
+                          {
+                            label: "الاسم الكامل",
+                            type: "text",
+                            ph: "شاذلي طارق الشاذلي",
+                            key: "name"
+                          },
+                          { label: "رقم الهاتف", type: "tel", ph: "09XXXXXXXX", key: "phone" },
+                          {
+                            label: "البريد الإلكتروني",
+                            type: "email",
+                            ph: "xxx@email.com",
+                            key: "email"
+                          },
+                          {
+                            label: "كلمة المرور",
+                            type: "password",
+                            ph: "••••••••",
+                            key: "password",
+                            visible: showPassword,
+                            toggleVisible: () => setShowPassword(!showPassword)
+                          },
+                          {
+                            label: "تأكيد كلمة المرور",
+                            type: "password",
+                            ph: "••••••••",
+                            key: "confirmPassword",
+                            visible: showConfirmPassword,
+                            toggleVisible: () => setShowConfirmPassword(!showConfirmPassword)
+                          },
+                        ].map((f) => (
+                          <div key={f.key}>
+                            <label htmlFor={`register-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
+                              {f.label}
+                            </label>
+                            {f.type === "password" ? (
+                              <div className="relative">
                                 <input
                                   id={`register-${f.key}`}
                                   name={`register-${f.key}`}
-                                  type={f.type}
+                                  type={f.visible ? "text" : "password"}
                                   placeholder={f.ph}
                                   value={registerForm[f.key as keyof typeof registerForm]}
-                                  onChange={(e) => setRegisterForm({ ...registerForm, [f.key]: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                                  onChange={(e) => { setRegisterForm({ ...registerForm, [f.key]: e.target.value }); setRegisterErrors({ ...registerErrors, [f.key]: '' }) }}
+                                  required
+                                  minLength={6}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${registerErrors[f.key as keyof typeof registerErrors] ? 'border-red-500' : 'border-slate-200'}`}
                                 />
-                              )}
-                            </div>
-                          ))}
-                          <div>
-                            <label htmlFor="register-city" className="block text-sm font-semibold text-slate-700 mb-2">
-                              المدينة
-                            </label>
-                            <select
-                              id="register-city"
-                              name="register-city"
-                              value={registerForm.city}
-                              onChange={(e) => setRegisterForm({ ...registerForm, city: e.target.value })}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
-                            >
-                              <option value="">اختر مدينتك</option>
-                              {cities.map((c) => (
-                                <option key={c._id} value={c._id}>{c.name}</option>
-                              ))}
-                            </select>
-                            {cities.length === 0 && (
-                              <p className="text-xs text-slate-400 mt-1">لا توجد مدن متاحة حالياً، يرجى المحاولة لاحقاً</p>
+                                <button
+                                  type="button"
+                                  onClick={f.toggleVisible}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                  {f.visible ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                              </div>
+                            ) : (
+                              <input
+                                id={`register-${f.key}`}
+                                name={`register-${f.key}`}
+                                type={f.type}
+                                placeholder={f.ph}
+                                value={registerForm[f.key as keyof typeof registerForm]}
+                                onChange={(e) => { setRegisterForm({ ...registerForm, [f.key]: e.target.value }); setRegisterErrors({ ...registerErrors, [f.key]: '' }) }}
+                                required
+                                className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${registerErrors[f.key as keyof typeof registerErrors] ? 'border-red-500' : 'border-slate-200'}`}
+                              />
                             )}
+                            {registerErrors[f.key as keyof typeof registerErrors] && <p className="text-red-500 text-xs mt-1">{registerErrors[f.key as keyof typeof registerErrors]}</p>}
                           </div>
-                          {message && (
-                            <div className={`text-sm ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                              {message}
-                            </div>
-                          )}
-                          <button
-                            onClick={handleRegister}
-                            disabled={loading}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                        ))}
+                        <div>
+                          <label htmlFor="register-city" className="block text-sm font-semibold text-slate-700 mb-2">
+                            المدينة
+                          </label>
+                          <select
+                            id="register-city"
+                            name="register-city"
+                            value={registerForm.city}
+                            onChange={(e) => { setRegisterForm({ ...registerForm, city: e.target.value }); setRegisterErrors({ ...registerErrors, city: '' }) }}
+                            required
+                            className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${registerErrors.city ? 'border-red-500' : 'border-slate-200'}`}
                           >
-                            {loading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
-                          </button>
+                            <option value="">اختر مدينتك</option>
+                            {cities.map((c) => (
+                              <option key={c._id} value={c._id}>{c.name}</option>
+                            ))}
+                          </select>
+                          {registerErrors.city && <p className="text-red-500 text-xs mt-1">{registerErrors.city}</p>}
+                          {cities.length === 0 && (
+                            <p className="text-xs text-slate-400 mt-1">لا توجد مدن متاحة حالياً، يرجى المحاولة لاحقاً</p>
+                          )}
                         </div>
-                      </>
-                    )}
-                  </div>
+                        {message && (
+                          <div className={`text-sm ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                            {message}
+                          </div>
+                        )}
+                        <button
+                          onClick={handleRegister}
+                          disabled={loading}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          {loading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
-            </>
+
+            </section>
           ) : (
             <div className="grid lg:grid-cols-5 gap-8">
               {/* Order creation */}
@@ -1252,6 +1374,8 @@ export default function App() {
                         type="number"
                         value={orderForm.weight}
                         onChange={(e) => setOrderForm({ ...orderForm, weight: Number(e.target.value) })}
+                        required
+                        min="1"
                         className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
                       />
                     </div>
@@ -1264,6 +1388,7 @@ export default function App() {
                         name="order-size"
                         value={orderForm.size}
                         onChange={(e) => setOrderForm({ ...orderForm, size: e.target.value })}
+                        required
                         className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right bg-white"
                       >
                         <option value="1">صغير (1)</option>
@@ -1301,7 +1426,7 @@ export default function App() {
                     <button
                       onClick={handleCreateOrder}
                       disabled={loading}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 rounded-xl transition-colors disabled:opacity-50"
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                     >
                       {loading ? 'جاري إنشاء الطلب...' : 'إنشاء الطلب'}
                     </button>
@@ -1316,7 +1441,7 @@ export default function App() {
 
                 {/* Order tracking */}
                 {currentOrder && (
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+                  <div className="bg-white px-4">
                     <div className="flex items-center justify-between mb-5">
                       <h2 className="text-base font-black text-slate-900">
                         تتبع الطلب #{currentOrder._id?.slice(-6) || '---'}
@@ -1356,6 +1481,48 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    {/* Cancel button for pending orders */}
+                    {currentOrder.status === 'pending' && (
+                      <div className="mb-4">
+                        <button
+                          onClick={handleCancelOrder}
+                          disabled={loading}
+                          className="w-fit bg-red-100 hover:bg-red-200 text-red-700 font-bold px-6 py-2 rounded-xl transition-colors disabled:opacity-50 text-sm"
+                        >
+                          {loading ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                        </button>
+                      </div>
+                    )}
+                    {/* Auto-cancel message */}
+                    {currentOrder.status === 'cancelled' && currentOrder.cancelReason === 'timeout' && (
+                      <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+                        <div className="font-black text-amber-800 mb-2">⏰ انتهت مدة الانتظار</div>
+                        <div className="text-amber-700 text-sm mb-3">
+                          عذراً، لم يتم العثور على مندوب متاح في الوقت المحدد. يرجى الانتظار قليلاً ثم إعادة إنشاء الطلب.
+                        </div>
+                        <button
+                          onClick={handleReorder}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm"
+                        >
+                          إعادة الطلب
+                        </button>
+                      </div>
+                    )}
+                    {/* Client cancel message */}
+                    {currentOrder.status === 'cancelled' && currentOrder.cancelReason === 'client' && (
+                      <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
+                        <div className="font-black text-slate-800 mb-2">تم إلغاء الطلب</div>
+                        <div className="text-slate-600 text-sm mb-3">
+                          يمكنك إعادة إنشاء الطلب في أي وقت
+                        </div>
+                        <button
+                          onClick={handleReorder}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm"
+                        >
+                          إعادة الطلب
+                        </button>
+                      </div>
+                    )}
                     {/* Status steps */}
                     <div className="flex items-center mb-6 gap-0">
                       {[
@@ -1426,12 +1593,12 @@ export default function App() {
                             {currentOrder.driver.vehicleType || 'دراجة نارية'} • {currentOrder.driver.vehicleNumber || '---'}
                           </div>
                           <div className="flex items-center gap-1 mt-1">
-                            {"★★★★★".split("").map((s, i) => (
-                              <span key={i} className="text-yellow-400 text-xs">
-                                {s}
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <span key={n} className={`text-xs ${n <= Math.round(currentOrder.driver.rating || 0) ? 'text-yellow-400' : 'text-slate-200'}`}>
+                                ★
                               </span>
                             ))}
-                            <span className="text-xs text-slate-500 mr-1">{currentOrder.driver.rating?.toFixed(1) || '0.0'}</span>
+                            <span className="text-xs text-slate-500 mr-1">{(currentOrder.driver.rating || 0).toFixed(1)}</span>
                           </div>
                         </div>
                         <button className="bg-green-100 text-green-700 font-bold text-sm px-4 py-2 rounded-xl hover:bg-green-200 transition-colors">
@@ -1439,790 +1606,1097 @@ export default function App() {
                         </button>
                       </div>
                     )}
+                    {/* Rate the driver - shown once the order is delivered */}
+                    {currentOrder.status === 'delivered' && (
+                      <div className="mt-4 bg-green-50 border border-green-100 rounded-2xl p-4 text-center">
+                        {currentOrder.rating ? (
+                          <>
+                            <div className="font-black text-green-800 mb-1">شكرًا لتقييمك 🎉</div>
+                            <div className="flex items-center justify-center gap-1">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <span key={n} className={`text-lg ${n <= currentOrder.rating ? 'text-yellow-400' : 'text-slate-200'}`}>★</span>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-black text-slate-800 mb-2">كيف كانت تجربتك مع المندوب؟</div>
+                            <div className="flex items-center justify-center gap-1 mb-3">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  onClick={() => setRatingValue(n)}
+                                  onMouseEnter={() => setRatingHover(n)}
+                                  onMouseLeave={() => setRatingHover(0)}
+                                  className={`text-2xl transition-colors ${n <= (ratingHover || ratingValue) ? 'text-yellow-400' : 'text-slate-300'}`}
+                                  aria-label={`${n} نجوم`}
+                                >
+                                  ★
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              onClick={() => handleRateOrder(currentOrder._id)}
+                              disabled={ratingSubmitting || ratingValue === 0}
+                              className="bg-green-600 hover:bg-green-700 text-white font-bold text-sm px-6 py-2 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {ratingSubmitting ? 'جاري الإرسال...' : 'إرسال التقييم'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
-          )}
-        </div>
+          )
+          }
+        </div >
       )}
 
       {/* ─── DRIVER APP ─── */}
-      {activeView === "driver" && (
-        <div className="top-spacing max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-          <div className="mb-8">
-            <h1 className="text-sm font-black text-slate-900">
-              تطبيق المندوب
-            </h1>
-            <p className="text-slate-500 mt-1">
-              انضم إلى شبكة مندوبي وصل واكسب أرباحًا يومية
-            </p>
-          </div>
-
-          {token && user?.role === 'client' ? (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-              <h2 className="text-lg font-black text-red-800 mb-2">عفواً، هذه الصفحة للمندوبين فقط</h2>
-              <p className="text-red-600 mb-4">أنت مسجل دخول كزبون. يرجى استخدام تطبيق الزبون.</p>
-              <button
-                onClick={() => setActiveView('client')}
-                className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
-              >
-                الانتقال لتطبيق الزبون
-              </button>
+      {
+        activeView === "driver" && (
+          <div className="top-spacing max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+            <div className="mb-8">
+              <h1 className="text-sm font-black text-slate-900">
+                تطبيق المندوب
+              </h1>
+              <p className="text-slate-500 mt-1">
+                انضم إلى شبكة مندوبي وصل واكسب أرباحًا يومية
+              </p>
             </div>
-          ) : !token ? (
-            <>
-              {/* Tab toggle */}
-              <div className="inline-flex bg-slate-100 rounded-xl p-1 mb-5 md:mb-6 gap-1">
-                {(["login", "register"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setActiveTab(t)}
-                    className={`px-6 py-1.5 md:py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === t
-                      ? "bg-white shadow text-green-700"
-                      : "text-slate-500"
-                      }`}
-                  >
-                    {t === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
-                  </button>
-                ))}
-              </div>
 
-              <div className="grid lg:grid-cols-5 gap-8">
+            {token && user?.role === 'client' ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+                <h2 className="text-lg font-black text-red-800 mb-2">عفواً، هذه الصفحة للمندوبين فقط</h2>
+                <p className="text-red-600 mb-4">
+                  أنت مسجل دخول حاليًا كزبون. للدخول أو التسجيل كمندوب، يرجى تسجيل الخروج
+                  من حساب الزبون أولاً، ثم اضغط على زر «انضم كمندوب».
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    onClick={handleLogout}
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                  >
+                    تسجيل الخروج
+                  </button>
+                  <button
+                    onClick={() => setActiveView('client')}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-3 rounded-xl transition-colors"
+                  >
+                    الانتقال لتطبيق الزبون
+                  </button>
+                </div>
+              </div>
+            ) : !token ? (
+              <>
+                {/* Tab toggle */}
+                <div className="flex bg-slate-100 mx-auto w-fit rounded-xl p-2 mb-5 md:mb-6 gap-1">
+                  {(["login", "register"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => { setActiveTab(t); setDriverStep(1) }}
+                      className={`px-6 py-1.5 md:py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === t
+                        ? "bg-white shadow text-green-700"
+                        : "text-slate-500"
+                        }`}
+                    >
+                      {t === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Auth form */}
-                <div className="lg:col-span-2">
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                    {activeTab === "login" ? (
-                      <>
-                        <h2 className="text-sm font-black text-slate-900 mb-6">
-                          أهلًا بعودتك 👋
-                        </h2>
-                        <div className="space-y-4">
+                {activeTab === "login" ? (
+                  <div className="bg-white mx-auto max-w-xl border border-slate-100 rounded-2xl shadow-xs p-4">
+                    <h2 className="text-sm font-black text-slate-900 mb-6">
+                      أهلًا بعودتك 👋
+                    </h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label htmlFor="login-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                          رقم الهاتف أو البريد الإلكتروني
+                        </label>
+                        <input
+                          id="login-email-2"
+                          name="login-email-2"
+                          type="text"
+                          placeholder="05XXXXXXXX أو name@email.com"
+                          value={loginForm.email}
+                          onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                          required
+                          className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="login-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                          كلمة المرور
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="login-password-2"
+                            name="login-password-2"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            value={loginForm.password}
+                            onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                            required
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                        </div>
+                      </div>
+                      {message && (
+                        <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-red-400'}`}>
+                          {message}
+                        </div>
+                      )}
+                      <button
+                        onClick={handleLogin}
+                        disabled={loading}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 md:py-3 rounded-xl transition-colors disabled:opacity-50"
+                      >
+                        {loading ? 'جاري الدخول...' : 'دخول'}
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("register")}
+                        className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                      >
+                        ليس لديك حساب؟ سجّل الآن
+                      </button>
+                      <button
+                        onClick={() => { setForgotPasswordStep('email'); setActiveTab('forgot-password') }}
+                        className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                      >
+                        نسيت كلمة المرور؟
+                      </button>
+                    </div>
+                  </div>
+                ) : activeTab === "forgot-password" ? (
+                  <div className="bg-white mx-auto max-w-xl border border-slate-100 rounded-2xl shadow-xs p-4">
+                    <h2 className="text-sm font-black text-slate-900 mb-6">
+                      استرجاع كلمة المرور
+                    </h2>
+                    <div className="space-y-4">
+                      {forgotPasswordStep === 'email' && (
+                        <>
                           <div>
-                            <label htmlFor="login-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                              رقم الهاتف أو البريد الإلكتروني
+                            <label htmlFor="forgot-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                              البريد الإلكتروني
                             </label>
                             <input
-                              id="login-email-2"
-                              name="login-email-2"
-                              type="text"
-                              placeholder="05XXXXXXXX أو name@email.com"
-                              value={loginForm.email}
-                              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                              id="forgot-email-2"
+                              name="forgot-email-2"
+                              type="email"
+                              placeholder="name@email.com"
+                              value={forgotPasswordForm.email}
+                              onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
+                              required
+                              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
                             />
                           </div>
-                          <div>
-                            <label htmlFor="login-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                              كلمة المرور
-                            </label>
-                            <div className="relative">
-                              <input
-                                id="login-password-2"
-                                name="login-password-2"
-                                type={showPassword ? "text" : "password"}
-                                placeholder="••••••••"
-                                value={loginForm.password}
-                                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                                className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                              >
-                                {showPassword ? '👁️' : '👁️‍🗨️'}
-                              </button>
-                            </div>
-                          </div>
                           {message && (
-                            <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-red-400'}`}>
+                            <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
                               {message}
                             </div>
                           )}
                           <button
-                            onClick={handleLogin}
+                            onClick={handleForgotPassword}
                             disabled={loading}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 md:py-3 rounded-xl transition-colors disabled:opacity-50"
+                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                           >
-                            {loading ? 'جاري الدخول...' : 'دخول'}
+                            {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
                           </button>
                           <button
-                            onClick={() => setActiveTab("register")}
+                            onClick={() => setActiveTab('login')}
                             className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
                           >
-                            ليس لديك حساب؟ سجّل الآن
+                            العودة لتسجيل الدخول
+                          </button>
+                        </>
+                      )}
+                      {forgotPasswordStep === 'otp' && (
+                        <>
+                          <div>
+                            <label htmlFor="forgot-otp-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                              رمز التحقق (6 أرقام)
+                            </label>
+                            <input
+                              id="forgot-otp-2"
+                              name="forgot-otp-2"
+                              type="text"
+                              placeholder="123456"
+                              value={forgotPasswordForm.otp}
+                              onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value })}
+                              required
+                              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
+                              maxLength={6}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="forgot-new-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                              كلمة المرور الجديدة
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="forgot-new-password-2"
+                                name="forgot-new-password-2"
+                                type={showNewPassword ? "text" : "password"}
+                                placeholder="••••••••"
+                                value={forgotPasswordForm.newPassword}
+                                onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value })}
+                                required
+                                minLength={6}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                              >
+                                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                              </button>
+                            </div>
+                          </div>
+                          {message && (
+                            <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                              {message}
+                            </div>
+                          )}
+                          <button
+                            onClick={handleResetPassword}
+                            disabled={loading}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                          >
+                            {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
                           </button>
                           <button
-                            onClick={() => { setForgotPasswordStep('email'); setActiveTab('forgot-password') }}
+                            onClick={handleResendForgotPasswordOTP}
+                            disabled={loading}
+                            className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                          >
+                            {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
+                          </button>
+                          <button
+                            onClick={() => setForgotPasswordStep('email')}
                             className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
                           >
-                            نسيت كلمة المرور؟
+                            العودة
                           </button>
-                        </div>
-                      </>
-                    ) : activeTab === "forgot-password" ? (
-                      <>
-                        <h2 className="text-sm font-black text-slate-900 mb-6">
-                          استرجاع كلمة المرور
-                        </h2>
-                        <div className="space-y-4">
-                          {forgotPasswordStep === 'email' && (
-                            <>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Driver registration with steps */}
+                    <div className="grid lg:grid-cols-3 gap-2 mb-6">
+                      <div className="lg:col-span-2">
+                        {/* Step 1 */}
+                        {driverStep === 1 && (
+                          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+                            <h2 className="text-base font-black text-slate-900 mb-4">
+                              البيانات الشخصية
+                            </h2>
+                            <div className="space-y-4">
                               <div>
-                                <label htmlFor="forgot-email-2" className="block text-sm font-semibold text-slate-700 mb-2">
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  الاسم الكامل
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="الاسم الكامل"
+                                  value={driverForm.name}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, name: e.target.value }); setDriverErrors({ ...driverErrors, name: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.name ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.name && <p className="text-red-500 text-xs mt-1">{driverErrors.name}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  رقم الهاتف
+                                </label>
+                                <input
+                                  type="tel"
+                                  placeholder="09XXXXXXXX"
+                                  value={driverForm.phone}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, phone: e.target.value }); setDriverErrors({ ...driverErrors, phone: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.phone ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.phone && <p className="text-red-500 text-xs mt-1">{driverErrors.phone}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
                                   البريد الإلكتروني
                                 </label>
                                 <input
-                                  id="forgot-email-2"
-                                  name="forgot-email-2"
                                   type="email"
                                   placeholder="name@email.com"
-                                  value={forgotPasswordForm.email}
-                                  onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                                  value={driverForm.email}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, email: e.target.value }); setDriverErrors({ ...driverErrors, email: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.email ? 'border-red-500' : 'border-slate-200'}`}
                                 />
+                                {driverErrors.email && <p className="text-red-500 text-xs mt-1">{driverErrors.email}</p>}
                               </div>
-                              {message && (
-                                <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                                  {message}
-                                </div>
-                              )}
-                              <button
-                                onClick={handleForgotPassword}
-                                disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
-                              >
-                                {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
-                              </button>
-                              <button
-                                onClick={() => setActiveTab('login')}
-                                className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                              >
-                                العودة لتسجيل الدخول
-                              </button>
-                            </>
-                          )}
-                          {forgotPasswordStep === 'otp' && (
-                            <>
                               <div>
-                                <label htmlFor="forgot-otp-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                                  رمز التحقق (6 أرقام)
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  رقم الهوية الوطنية
                                 </label>
                                 <input
-                                  id="forgot-otp-2"
-                                  name="forgot-otp-2"
                                   type="text"
-                                  placeholder="123456"
-                                  value={forgotPasswordForm.otp}
-                                  onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
-                                  maxLength={6}
+                                  placeholder="رقم الهوية"
+                                  value={driverForm.nationalId}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, nationalId: e.target.value }); setDriverErrors({ ...driverErrors, nationalId: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.nationalId ? 'border-red-500' : 'border-slate-200'}`}
                                 />
+                                {driverErrors.nationalId && <p className="text-red-500 text-xs mt-1">{driverErrors.nationalId}</p>}
                               </div>
                               <div>
-                                <label htmlFor="forgot-new-password-2" className="block text-sm font-semibold text-slate-700 mb-2">
-                                  كلمة المرور الجديدة
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  تاريخ الميلاد
+                                </label>
+                                <input
+                                  type="date"
+                                  value={driverForm.birthDate}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, birthDate: e.target.value }); setDriverErrors({ ...driverErrors, birthDate: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.birthDate ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.birthDate && <p className="text-red-500 text-xs mt-1">{driverErrors.birthDate}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  مدينة الإقامة
+                                </label>
+                                <select
+                                  value={driverForm.city}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, city: e.target.value }); setDriverErrors({ ...driverErrors, city: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${driverErrors.city ? 'border-red-500' : 'border-slate-200'}`}
+                                >
+                                  <option value="">اختر مدينتك</option>
+                                  {cities.map((c) => (
+                                    <option key={c._id} value={c._id}>{c.name}</option>
+                                  ))}
+                                </select>
+                                {driverErrors.city && <p className="text-red-500 text-xs mt-1">{driverErrors.city}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  كلمة المرور
                                 </label>
                                 <div className="relative">
                                   <input
-                                    id="forgot-new-password-2"
-                                    name="forgot-new-password-2"
-                                    type={showNewPassword ? "text" : "password"}
+                                    type={showDriverPassword ? "text" : "password"}
                                     placeholder="••••••••"
-                                    value={forgotPasswordForm.newPassword}
-                                    onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value })}
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                                    value={driverForm.password}
+                                    onChange={(e) => { setDriverForm({ ...driverForm, password: e.target.value }); setDriverErrors({ ...driverErrors, password: '' }) }}
+                                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${driverErrors.password ? 'border-red-500' : 'border-slate-200'}`}
                                   />
                                   <button
                                     type="button"
-                                    onClick={() => setShowNewPassword(!showNewPassword)}
+                                    onClick={() => setShowDriverPassword(!showDriverPassword)}
                                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                                   >
-                                    {showNewPassword ? '👁️' : '👁️‍🗨️'}
+                                    {showDriverPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                   </button>
                                 </div>
+                                {driverErrors.password && <p className="text-red-500 text-xs mt-1">{driverErrors.password}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  تأكيد كلمة المرور
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type={showDriverConfirmPassword ? "text" : "password"}
+                                    placeholder="••••••••"
+                                    value={driverForm.confirmPassword}
+                                    onChange={(e) => { setDriverForm({ ...driverForm, confirmPassword: e.target.value }); setDriverErrors({ ...driverErrors, confirmPassword: '' }) }}
+                                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${driverErrors.confirmPassword ? 'border-red-500' : 'border-slate-200'}`}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowDriverConfirmPassword(!showDriverConfirmPassword)}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                  >
+                                    {showDriverConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                  </button>
+                                </div>
+                                {driverErrors.confirmPassword && <p className="text-red-500 text-xs mt-1">{driverErrors.confirmPassword}</p>}
                               </div>
                               {message && (
-                                <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                                <div className={`text-sm ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
                                   {message}
                                 </div>
                               )}
                               <button
-                                onClick={handleResetPassword}
-                                disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                                onClick={() => {
+                                  const errors = {
+                                    name: '', phone: '', email: '', nationalId: '', birthDate: '', city: '', password: '', confirmPassword: '',
+                                    vehicleType: '', plateNumber: '', vehicleModel: '', vehicleYear: '', vehicleColor: '', chassisNumber: '', licenseNumber: ''
+                                  }
+                                  if (!driverForm.name.trim()) errors.name = 'املء الحقل'
+                                  if (!driverForm.phone.trim()) errors.phone = 'املء الحقل'
+                                  if (!driverForm.email.trim()) errors.email = 'املء الحقل'
+                                  if (!driverForm.nationalId.trim()) errors.nationalId = 'املء الحقل'
+                                  if (!driverForm.birthDate) errors.birthDate = 'املء الحقل'
+                                  if (!driverForm.city) errors.city = 'املء الحقل'
+                                  if (!driverForm.password) errors.password = 'املء الحقل'
+                                  else if (driverForm.password.length < 6) errors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'
+                                  if (!driverForm.confirmPassword) errors.confirmPassword = 'املء الحقل'
+                                  else if (driverForm.password !== driverForm.confirmPassword) errors.confirmPassword = 'كلمتي المرور غير متطابقين'
+
+                                  setDriverErrors(errors)
+                                  if (Object.values(errors).some(e => e)) return
+
+                                  setDriverStep(2)
+                                }}
+                                className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
                               >
-                                {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
+                                التالي ←
                               </button>
-                              <button
-                                onClick={handleResendForgotPasswordOTP}
-                                disabled={loading}
-                                className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
-                              >
-                                {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
-                              </button>
-                              <button
-                                onClick={() => setForgotPasswordStep('email')}
-                                className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                              >
-                                العودة
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <h2 className="text-base font-black text-slate-900 mb-6">
-                          انضم كمندوب جديد
-                        </h2>
-                        <div className="space-y-4">
-                          {[
-                            {
-                              label: "الاسم الكامل",
-                              type: "text",
-                              ph: " ابراهيم النعيم بليله ",
-                              key: "name"
-                            },
-                            { label: "رقم الهاتف", type: "tel", ph: "09XXXXXXXX", key: "phone" },
-                            {
-                              label: "البريد الإلكتروني",
-                              type: "email",
-                              ph: "@email.com",
-                              key: "email"
-                            },
-                            {
-                              label: "كلمة المرور",
-                              type: "password",
-                              ph: "••••••••",
-                              key: "password",
-                              visible: showDriverPassword,
-                              toggleVisible: () => setShowDriverPassword(!showDriverPassword)
-                            },
-                            {
-                              label: "تأكيد كلمة المرور",
-                              type: "password",
-                              ph: "••••••••",
-                              key: "confirmPassword",
-                              visible: showDriverConfirmPassword,
-                              toggleVisible: () => setShowDriverConfirmPassword(!showDriverConfirmPassword)
-                            },
-                          ].map((f) => (
-                            <div key={f.key}>
-                              <label htmlFor={`driver-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
-                                {f.label}
-                              </label>
-                              {f.type === "password" ? (
-                                <div className="relative">
-                                  <input
-                                    id={`driver-${f.key}`}
-                                    name={`driver-${f.key}`}
-                                    type={f.visible ? "text" : "password"}
-                                    placeholder={f.ph}
-                                    value={driverForm[f.key as keyof typeof driverForm]}
-                                    onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={f.toggleVisible}
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                  >
-                                    {f.visible ? '👁️' : '👁️‍🗨️'}
-                                  </button>
-                                </div>
-                              ) : (
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Step 2 */}
+                        {driverStep === 2 && (
+                          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                            <h2 className="text-base font-black text-slate-900 mb-6">
+                              بيانات المركبة
+                            </h2>
+                            <div className="space-y-4">
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  نوع المركبة
+                                </label>
+                                <select
+                                  value={driverForm.vehicleType}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, vehicleType: e.target.value }); setDriverErrors({ ...driverErrors, vehicleType: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${driverErrors.vehicleType ? 'border-red-500' : 'border-slate-200'}`}
+                                >
+                                  <option value="motorcycle">دراجة نارية</option>
+                                  <option value="car">سيارة</option>
+                                  <option value="van">شاحنة صغيرة</option>
+                                </select>
+                                {driverErrors.vehicleType && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleType}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  رقم اللوحة
+                                </label>
                                 <input
-                                  id={`driver-${f.key}`}
-                                  name={`driver-${f.key}`}
+                                  type="text"
+                                  placeholder="رقم اللوحة"
+                                  value={driverForm.plateNumber}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, plateNumber: e.target.value }); setDriverErrors({ ...driverErrors, plateNumber: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.plateNumber ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.plateNumber && <p className="text-red-500 text-xs mt-1">{driverErrors.plateNumber}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  موديل المركبة
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="موديل المركبة"
+                                  value={driverForm.vehicleModel}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, vehicleModel: e.target.value }); setDriverErrors({ ...driverErrors, vehicleModel: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleModel ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.vehicleModel && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleModel}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  سنة الصنع
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="سنة الصنع"
+                                  value={driverForm.vehicleYear}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, vehicleYear: e.target.value }); setDriverErrors({ ...driverErrors, vehicleYear: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleYear ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.vehicleYear && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleYear}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  لون المركبة
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="لون المركبة"
+                                  value={driverForm.vehicleColor}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, vehicleColor: e.target.value }); setDriverErrors({ ...driverErrors, vehicleColor: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleColor ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.vehicleColor && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleColor}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  رقم الشاسيه
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="رقم الشاسيه"
+                                  value={driverForm.chassisNumber}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, chassisNumber: e.target.value }); setDriverErrors({ ...driverErrors, chassisNumber: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.chassisNumber ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.chassisNumber && <p className="text-red-500 text-xs mt-1">{driverErrors.chassisNumber}</p>}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                  رقم رخصة القيادة
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="رقم رخصة القيادة"
+                                  value={driverForm.licenseNumber}
+                                  onChange={(e) => { setDriverForm({ ...driverForm, licenseNumber: e.target.value }); setDriverErrors({ ...driverErrors, licenseNumber: '' }) }}
+                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.licenseNumber ? 'border-red-500' : 'border-slate-200'}`}
+                                />
+                                {driverErrors.licenseNumber && <p className="text-red-500 text-xs mt-1">{driverErrors.licenseNumber}</p>}
+                              </div>
+                              <div className="flex gap-3 mt-6">
+                                <button
+                                  onClick={() => setDriverStep(1)}
+                                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
+                                >
+                                  → السابق
+                                </button>
+                                <button
+                                  onClick={() => setDriverStep(3)}
+                                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+                                >
+                                  التالي ←
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Step 3 */}
+                        {driverStep === 3 && (
+                          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                            <h2 className="text-base font-black text-slate-900 mb-2">
+                              المستندات المطلوبة
+                            </h2>
+                            <p className="text-slate-500 text-sm mb-4">
+                              سيتم طلب المستندات لاحقاً بعد مراجعة طلبك
+                            </p>
+                            <div className="flex gap-3 mt-6">
+                              <button
+                                onClick={() => setDriverStep(2)}
+                                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
+                              >
+                                → السابق
+                              </button>
+                              <button
+                                onClick={() => setDriverStep(4)}
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+                              >
+                                التالي ←
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Step 4 */}
+                        {driverStep === 4 && (
+                          <div className="bg-white">
+                            <h2 className="text-base font-black text-slate-900 mb-2">
+                              الإقرار والتأكيد
+                            </h2>
+                            <p className="text-slate-500 text-sm mb-4">
+                              يرجى قراءة الشروط والسياسات قبل الموافقة
+                            </p>
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+                              <p className="text-amber-800 text-xs leading-relaxed mb-2">
+                                <strong>تنبيه هام:</strong>
+                              </p>
+                              <p className="text-amber-700 text-sm leading-relaxed">
+                                يُقرّ المندوب بأن التسجيل الإلكتروني هو تسجيل مبدئي فقط،
+                                ولا يتم تفعيل الحساب أو السماح له بتقديم خدمات التوصيل
+                                إلا بعد استكمال جميع الإجراءات التالية:
+                              </p>
+                              <ul className="text-amber-700 text-sm leading-relaxed mt-2 space-y-1 list-disc list-inside">
+                                <li className="flex gap-2">
+                                  <span className="font-bold">١.</span>
+                                  <span>تقديم المستندات المطلوبة (الهوية، رخصة القيادة، رخصة المركبة)</span>
+                                </li>
+                                <li className="flex gap-2">
+                                  <span className="font-bold">٢.</span>
+                                  <span>مراجعة الإدارة للبيانات والمستندات</span>
+                                </li>
+                                <li className="flex gap-2">
+                                  <span className="font-bold">٣.</span>
+                                  <span>لا يعتبر المندوب معتمدًا أو مخوّلًا بتقديم خدمات
+                                    التوصيل إلا بعد إشعاره رسميًا عبر التطبيق بتفعيل
+                                    حسابه.</span>
+                                </li>
+                              </ul>
+                            </div>
+                            <div className="flex items-start gap-3 mb-4">
+                              <input
+                                type="checkbox"
+                                id="driver-terms"
+                                checked={agreedToTerms}
+                                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                className="mt-1 w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
+                              />
+                              <label htmlFor="driver-terms" className="text-sm text-slate-600">
+                                أقر بأنني قرأت وفهمت الشروط والسياسات المذكورة أعلاه،
+                                وأوافق على الالتزام بها.
+                              </label>
+                            </div>
+                            <div className="flex gap-3 mb-3">
+                              <button
+                                onClick={() => setDriverStep(3)}
+                                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
+                              >
+                                → السابق
+                              </button>
+                              <button
+                                onClick={handleDriverRegister}
+                                disabled={loading || !agreedToTerms}
+                                title={!agreedToTerms ? 'يجب الموافقة على الشروط والسياسات أولاً' : undefined}
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                              >
+                                {loading ? 'جاري الإرسال...' : 'إرسال الطلب'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sidebar info */}
+                      <div className="hidden lg:block lg:col-span-1">
+                        <div className="bg-green-50 border border-green-100 rounded-2xl p-4 sticky top-24">
+                          <h3 className="font-black text-green-800 mb-3">خطوات التسجيل</h3>
+                          <div className="space-y-2 text-sm">
+                            <div className={`flex items-center gap-2 ${driverStep >= 1 ? 'text-green-700' : 'text-slate-400'}`}>
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${driverStep >= 1 ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}`}>1</span>
+                              <span>البيانات الشخصية</span>
+                            </div>
+                            <div className={`flex items-center gap-2 ${driverStep >= 2 ? 'text-green-700' : 'text-slate-400'}`}>
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${driverStep >= 2 ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
+                              <span>بيانات المركبة</span>
+                            </div>
+                            <div className={`flex items-center gap-2 ${driverStep >= 3 ? 'text-green-700' : 'text-slate-400'}`}>
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${driverStep >= 3 ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}`}>3</span>
+                              <span>المستندات</span>
+                            </div>
+                            <div className={`flex items-center gap-2 ${driverStep >= 4 ? 'text-green-700' : 'text-slate-400'}`}>
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${driverStep >= 4 ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}`}>4</span>
+                              <span>التأكيد</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Active order in progress - map + status controls */}
+                {currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status) && (
+                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4 mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-base font-black text-slate-900">
+                        طلب جارٍ #{currentOrder._id?.slice(-6)}
+                      </h2>
+                      <span className={`font-bold text-sm px-3 py-1 rounded-full ${currentOrder.status === 'accepted' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                        }`}>
+                        {currentOrder.status === 'accepted' ? 'في الطريق للاستلام' : 'تم الاستلام - جارٍ التوصيل'}
+                      </span>
+                    </div>
+
+                    {currentOrder.pickupLocation?.lat && currentOrder.deliveryLocation?.lat && (
+                      <div className="mb-4">
+                        <RouteMap
+                          pickup={currentOrder.pickupLocation}
+                          delivery={currentOrder.deliveryLocation}
+                          driverPosition={driverLivePosition}
+                          height="280px"
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid sm:grid-cols-2 gap-3 text-sm mb-4">
+                      <div className="bg-green-50 rounded-xl p-3 border border-green-100">
+                        <div className="font-semibold text-green-800 mb-0.5">📍 الاستلام</div>
+                        <div className="text-slate-600">{currentOrder.pickupLocation?.address}</div>
+                        <div className="text-slate-500 mt-1">{currentOrder.pickupLocation?.contactName} — {currentOrder.pickupLocation?.contactPhone}</div>
+                      </div>
+                      <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
+                        <div className="font-semibold text-yellow-800 mb-0.5">📍 التسليم</div>
+                        <div className="text-slate-600">{currentOrder.deliveryLocation?.address}</div>
+                        <div className="text-slate-500 mt-1">{currentOrder.deliveryLocation?.contactName} — {currentOrder.deliveryLocation?.contactPhone}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {currentOrder.status === 'accepted' && (
+                        <button
+                          onClick={() => handleUpdateDriverOrderStatus('picked_up')}
+                          disabled={loading}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
+                        >
+                          {loading ? '...' : 'تم استلام الطرد'}
+                        </button>
+                      )}
+                      {currentOrder.status === 'picked_up' && (
+                        <button
+                          onClick={() => handleUpdateDriverOrderStatus('delivered')}
+                          disabled={loading}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
+                        >
+                          {loading ? '...' : 'تم تسليم الطلب'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {driverProfile ? (
+                  <div className="max-w-4xl mx-auto">
+                    {/* Approval status banner */}
+                    {!driverProfile.isApproved ? (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
+                        <span className="text-2xl">⏳</span>
+                        <div>
+                          <div className="font-black text-yellow-800">حسابك قيد المراجعة</div>
+                          <div className="text-sm text-yellow-700">
+                            سيتم تفعيل حسابك بعد مراجعة الإدارة لبياناتك، سنعلمك فور الموافقة.
+                          </div>
+                        </div>
+                      </div>
+                    ) : driverProfile.isSuspended ? (
+                      <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
+                        <span className="text-2xl">🚫</span>
+                        <div>
+                          <div className="font-black text-red-800">حسابك موقوف</div>
+                          <div className="text-sm text-red-700">تواصل مع الإدارة لمعرفة السبب.</div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Greeting + availability toggle */}
+                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 mb-6">
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                          <h2 className="text-lg font-black text-slate-900">
+                            أهلًا {driverProfile.name} 👋
+                          </h2>
+                          <p className="text-sm text-slate-500 mt-1">
+                            {isDriverAvailable
+                              ? (currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status)
+                                ? 'لديك طلب جارٍ حالياً'
+                                : 'أنت متاح الآن، بانتظار وصول طلب جديد...')
+                              : 'أنت غير متاح، فعّل حالتك لبدء استقبال الطلبات'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleToggleAvailability}
+                          disabled={!driverProfile.isApproved || driverProfile.isSuspended}
+                          className={`px-6 py-2 rounded-xl font-bold transition-colors disabled:opacity-40 ${isDriverAvailable
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                            }`}
+                        >
+                          {isDriverAvailable ? '🟢 متاح لاستقبال الطلبات' : '⚪ غير متاح'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
+                        <div className="text-2xl font-black text-green-700">{driverProfile.totalDeliveries || 0}</div>
+                        <div className="text-xs text-slate-500 mt-1">توصيلات مكتملة</div>
+                      </div>
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
+                        <div className="text-2xl font-black text-green-700">{(driverProfile.balance || 0).toFixed(0)}</div>
+                        <div className="text-xs text-slate-500 mt-1">رصيدك (جنيه)</div>
+                      </div>
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
+                        <div className="text-2xl font-black text-green-700">{(driverProfile.totalEarnings || 0).toFixed(0)}</div>
+                        <div className="text-xs text-slate-500 mt-1">إجمالي الأرباح</div>
+                      </div>
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
+                        <div className="text-2xl font-black text-green-700">{(driverProfile.rating || 0).toFixed(1)} ⭐</div>
+                        <div className="text-xs text-slate-500 mt-1">التقييم</div>
+                      </div>
+                    </div>
+
+                    {/* Waiting state (no active order) */}
+                    {!(currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status)) && driverProfile.isApproved && (
+                      <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center">
+                        <div className="text-4xl mb-3">{isDriverAvailable ? '📡' : '💤'}</div>
+                        <div className="font-black text-slate-700 mb-1">
+                          {isDriverAvailable ? 'بانتظار طلب جديد' : 'قم بتفعيل حالتك لاستقبال الطلبات'}
+                        </div>
+                        <p className="text-sm text-slate-400">
+                          عند وصول طلب مناسب سيظهر لك إشعار فوري بصوت تنبيه ولديك دقيقتان للرد عليه.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Earnings history */}
+                    <div className="mt-6 bg-green-50 rounded-2xl p-4 border border-green-100">
+                      <h3 className="font-black text-green-800 mb-3 text-sm">
+                        سجل الأرباح — هذا الشهر
+                      </h3>
+                      <div className="space-y-2">
+                        {driverEarnings.length > 0 ? (
+                          driverEarnings.map((r: any) => (
+                            <div
+                              key={r.date}
+                              className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-green-100"
+                            >
+                              <span className="text-sm text-slate-600 font-medium">{r.date}</span>
+                              <span className="text-xs text-slate-400">{r.orders} طلبات</span>
+                              <span className="font-black text-green-700 text-sm">{r.earned} جنيه</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-sm text-slate-500">
+                            لا توجد أرباح مسجلة لهذا الشهر
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid lg:grid-cols-3 gap-2 mb-6">
+                    <div className="lg:col-span-2">
+                      {/* Step 1 */}
+                      {driverStep === 1 && (
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+                          <h2 className="text-base font-black text-slate-900 mb-4">
+                            البيانات الشخصية
+                          </h2>
+                          <div className="grid sm:grid-cols-2 gap-4">
+                            {[
+                              {
+                                label: "الاسم الكامل",
+                                ph: "ابراهيم النعيم بليله",
+                                type: "text",
+                                key: "name"
+                              },
+                              { label: "رقم الهاتف", ph: "09XXXXXXXX", type: "tel", key: "phone" },
+                              {
+                                label: "البريد الإلكتروني",
+                                ph: "xxxx@email.com",
+                                type: "email",
+                                key: "email"
+                              },
+                              {
+                                label: "رقم الهوية الوطنية",
+                                ph: "XXXXXXX",
+                                type: "text",
+                                key: "nationalId"
+                              },
+                              {
+                                label: "تاريخ الميلاد",
+                                ph: "1990/01/01",
+                                type: "date",
+                                key: "birthDate"
+                              },
+                            ].map((f) => (
+                              <div key={f.key}>
+                                <label htmlFor={`driver-step1-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
+                                  {f.label}
+                                </label>
+                                <input
+                                  id={`driver-step1-${f.key}`}
+                                  name={`driver-step1-${f.key}`}
                                   type={f.type}
                                   placeholder={f.ph}
                                   value={driverForm[f.key as keyof typeof driverForm]}
                                   onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
-                                />
-                              )}
-                            </div>
-                          ))}
-                          {message && (
-                            <div className={`text-sm ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                              {message}
-                            </div>
-                          )}
-                          <button
-                            onClick={() => setDriverStep(1)}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
-                          >
-                            التالي ←
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Active order in progress - map + status controls */}
-              {currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status) && (
-                <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-base font-black text-slate-900">
-                      طلب جارٍ #{currentOrder._id?.slice(-6)}
-                    </h2>
-                    <span className={`font-bold text-sm px-3 py-1 rounded-full ${currentOrder.status === 'accepted' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                      }`}>
-                      {currentOrder.status === 'accepted' ? 'في الطريق للاستلام' : 'تم الاستلام - جارٍ التوصيل'}
-                    </span>
-                  </div>
-
-                  {currentOrder.pickupLocation?.lat && currentOrder.deliveryLocation?.lat && (
-                    <div className="mb-4">
-                      <RouteMap
-                        pickup={currentOrder.pickupLocation}
-                        delivery={currentOrder.deliveryLocation}
-                        driverPosition={driverLivePosition}
-                        height="280px"
-                      />
-                    </div>
-                  )}
-
-                  <div className="grid sm:grid-cols-2 gap-3 text-sm mb-4">
-                    <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-                      <div className="font-semibold text-green-800 mb-0.5">📍 الاستلام</div>
-                      <div className="text-slate-600">{currentOrder.pickupLocation?.address}</div>
-                      <div className="text-slate-500 mt-1">{currentOrder.pickupLocation?.contactName} — {currentOrder.pickupLocation?.contactPhone}</div>
-                    </div>
-                    <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
-                      <div className="font-semibold text-yellow-800 mb-0.5">📍 التسليم</div>
-                      <div className="text-slate-600">{currentOrder.deliveryLocation?.address}</div>
-                      <div className="text-slate-500 mt-1">{currentOrder.deliveryLocation?.contactName} — {currentOrder.deliveryLocation?.contactPhone}</div>
-                    </div>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {currentOrder.status === 'accepted' && (
-                      <button
-                        onClick={() => handleUpdateDriverOrderStatus('picked_up')}
-                        disabled={loading}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
-                      >
-                        {loading ? '...' : 'تم استلام الطرد'}
-                      </button>
-                    )}
-                    {currentOrder.status === 'picked_up' && (
-                      <button
-                        onClick={() => handleUpdateDriverOrderStatus('delivered')}
-                        disabled={loading}
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
-                      >
-                        {loading ? '...' : 'تم تسليم الطلب'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {driverProfile ? (
-                <div className="max-w-4xl mx-auto">
-                  {/* Approval status banner */}
-                  {!driverProfile.isApproved ? (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
-                      <span className="text-2xl">⏳</span>
-                      <div>
-                        <div className="font-black text-yellow-800">حسابك قيد المراجعة</div>
-                        <div className="text-sm text-yellow-700">
-                          سيتم تفعيل حسابك بعد مراجعة الإدارة لبياناتك، سنعلمك فور الموافقة.
-                        </div>
-                      </div>
-                    </div>
-                  ) : driverProfile.isSuspended ? (
-                    <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
-                      <span className="text-2xl">🚫</span>
-                      <div>
-                        <div className="font-black text-red-800">حسابك موقوف</div>
-                        <div className="text-sm text-red-700">تواصل مع الإدارة لمعرفة السبب.</div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Greeting + availability toggle */}
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 mb-6">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div>
-                        <h2 className="text-lg font-black text-slate-900">
-                          أهلًا {driverProfile.name} 👋
-                        </h2>
-                        <p className="text-sm text-slate-500 mt-1">
-                          {isDriverAvailable
-                            ? (currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status)
-                              ? 'لديك طلب جارٍ حالياً'
-                              : 'أنت متاح الآن، بانتظار وصول طلب جديد...')
-                            : 'أنت غير متاح، فعّل حالتك لبدء استقبال الطلبات'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleToggleAvailability}
-                        disabled={!driverProfile.isApproved || driverProfile.isSuspended}
-                        className={`px-6 py-2 rounded-xl font-bold transition-colors disabled:opacity-40 ${isDriverAvailable
-                          ? 'bg-green-600 hover:bg-green-700 text-white'
-                          : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                          }`}
-                      >
-                        {isDriverAvailable ? '🟢 متاح لاستقبال الطلبات' : '⚪ غير متاح'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                      <div className="text-2xl font-black text-green-700">{driverProfile.totalDeliveries || 0}</div>
-                      <div className="text-xs text-slate-500 mt-1">توصيلات مكتملة</div>
-                    </div>
-                    <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                      <div className="text-2xl font-black text-green-700">{(driverProfile.balance || 0).toFixed(0)}</div>
-                      <div className="text-xs text-slate-500 mt-1">رصيدك (جنيه)</div>
-                    </div>
-                    <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                      <div className="text-2xl font-black text-green-700">{(driverProfile.totalEarnings || 0).toFixed(0)}</div>
-                      <div className="text-xs text-slate-500 mt-1">إجمالي الأرباح</div>
-                    </div>
-                    <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                      <div className="text-2xl font-black text-green-700">{(driverProfile.rating || 0).toFixed(1)} ⭐</div>
-                      <div className="text-xs text-slate-500 mt-1">التقييم</div>
-                    </div>
-                  </div>
-
-                  {/* Waiting state (no active order) */}
-                  {!(currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status)) && driverProfile.isApproved && (
-                    <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center">
-                      <div className="text-4xl mb-3">{isDriverAvailable ? '📡' : '💤'}</div>
-                      <div className="font-black text-slate-700 mb-1">
-                        {isDriverAvailable ? 'بانتظار طلب جديد' : 'قم بتفعيل حالتك لاستقبال الطلبات'}
-                      </div>
-                      <p className="text-sm text-slate-400">
-                        عند وصول طلب مناسب سيظهر لك إشعار فوري بصوت تنبيه ولديك دقيقتان للرد عليه.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Earnings history */}
-                  <div className="mt-6 bg-green-50 rounded-2xl p-4 border border-green-100">
-                    <h3 className="font-black text-green-800 mb-3 text-sm">
-                      سجل الأرباح — هذا الشهر
-                    </h3>
-                    <div className="space-y-2">
-                      {driverEarnings.length > 0 ? (
-                        driverEarnings.map((r: any) => (
-                          <div
-                            key={r.date}
-                            className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-green-100"
-                          >
-                            <span className="text-sm text-slate-600 font-medium">{r.date}</span>
-                            <span className="text-xs text-slate-400">{r.orders} طلبات</span>
-                            <span className="font-black text-green-700 text-sm">{r.earned} جنيه</span>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-4 text-sm text-slate-500">
-                          لا توجد أرباح مسجلة لهذا الشهر
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid lg:grid-cols-3 gap-8 mb-8">
-                  <div className="lg:col-span-1">
-                    {/* Steps sidebar */}
-                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-5 mb-5">
-                      <h3 className="font-black text-slate-900 mb-4">
-                        خطوات التسجيل
-                      </h3>
-                      <div className="space-y-3">
-                        {[
-                          { n: 1, label: "البيانات الشخصية" },
-                          { n: 2, label: "بيانات المركبة" },
-                          { n: 3, label: "رفع المستندات" },
-                          { n: 4, label: "الإقرار والتأكيد" },
-                        ].map((s) => (
-                          <button
-                            key={s.n}
-                            onClick={() => setDriverStep(s.n)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-right ${driverStep === s.n
-                              ? "bg-green-600 text-white"
-                              : driverStep > s.n
-                                ? "bg-green-50 text-green-700"
-                                : "bg-slate-50 text-slate-500"
-                              }`}
-                          >
-                            <div
-                              className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0 ${driverStep === s.n
-                                ? "bg-white text-green-700"
-                                : driverStep > s.n
-                                  ? "bg-green-200 text-green-700"
-                                  : "bg-slate-200 text-slate-500"
-                                }`}
-                            >
-                              {driverStep > s.n ? "✓" : s.n}
-                            </div>
-                            <span className="font-semibold text-sm">{s.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Online toggle */}
-                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-5">
-                      <h3 className="font-black text-slate-900 mb-3">حالة الاتصال</h3>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-slate-700 text-sm">
-                            استقبال الطلبات
-                          </div>
-                          <div className={`text-xs font-medium mt-0.5 ${isDriverAvailable ? 'text-green-600' : 'text-slate-500'}`}>
-                            {isDriverAvailable ? 'متاح الآن ✓' : 'غير متاح'}
-                          </div>
-                        </div>
-                        <div
-                          onClick={handleToggleAvailability}
-                          className={`w-14 h-7 rounded-full relative cursor-pointer transition-colors ${isDriverAvailable ? 'bg-green-500' : 'bg-slate-300'}`}
-                        >
-                          <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-all ${isDriverAvailable ? 'right-1' : 'left-1'}`} />
-                        </div>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-center text-sm">
-                        <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-                          <div className="font-black text-green-700 text-lg">{driverProfile?.totalDeliveries || 0}</div>
-                          <div className="text-slate-500 text-xs">طلبات اليوم</div>
-                        </div>
-                        <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
-                          <div className="font-black text-yellow-700 text-lg">
-                            {driverProfile?.balance || 0} جنيه
-                          </div>
-                          <div className="text-slate-500 text-xs">أرباح اليوم</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-2">
-                    {/* Step 1 */}
-                    {driverStep === 1 && (
-                      <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                        <h2 className="text-base font-black text-slate-900 mb-6">
-                          البيانات الشخصية
-                        </h2>
-                        <div className="grid sm:grid-cols-2 gap-4">
-                          {[
-                            {
-                              label: "الاسم الكامل",
-                              ph: "ابراهيم النعيم بليله",
-                              type: "text",
-                              key: "name"
-                            },
-                            { label: "رقم الهاتف", ph: "09XXXXXXXX", type: "tel", key: "phone" },
-                            {
-                              label: "البريد الإلكتروني",
-                              ph: "@email.com",
-                              type: "email",
-                              key: "email"
-                            },
-                            {
-                              label: "رقم الهوية الوطنية",
-                              ph: "1XXXXXXXXX",
-                              type: "text",
-                              key: "nationalId"
-                            },
-                            {
-                              label: "تاريخ الميلاد",
-                              ph: "1990/01/01",
-                              type: "date",
-                              key: "birthDate"
-                            },
-                          ].map((f) => (
-                            <div key={f.key}>
-                              <label htmlFor={`driver-step1-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
-                                {f.label}
-                              </label>
-                              <input
-                                id={`driver-step1-${f.key}`}
-                                name={`driver-step1-${f.key}`}
-                                type={f.type}
-                                placeholder={f.ph}
-                                value={driverForm[f.key as keyof typeof driverForm]}
-                                onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
-                              />
-                            </div>
-                          ))}
-                          <div>
-                            <label htmlFor="driver-city" className="block text-sm font-semibold text-slate-700 mb-2">
-                              مدينة الإقامة
-                            </label>
-                            <select
-                              id="driver-city"
-                              name="driver-city"
-                              value={driverForm.city}
-                              onChange={(e) => setDriverForm({ ...driverForm, city: e.target.value })}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
-                            >
-                              <option value="">اختر مدينتك</option>
-                              {cities.map((c) => (
-                                <option key={c._id} value={c._id}>{c.name}</option>
-                              ))}
-                            </select>
-                            {cities.length === 0 && (
-                              <p className="text-xs text-slate-400 mt-1">لا توجد مدن متاحة حالياً، يرجى المحاولة لاحقاً</p>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (!driverForm.city) {
-                              setMessage('يرجى اختيار مدينة الإقامة')
-                              return
-                            }
-                            setMessage('')
-                            setDriverStep(2)
-                          }}
-                          className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
-                        >
-                          التالي ←
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Step 2 */}
-                    {driverStep === 2 && (
-                      <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                        <h2 className="text-base font-black text-slate-900 mb-6">
-                          بيانات المركبة
-                        </h2>
-                        <div className="space-y-4">
-                          <div className="grid sm:grid-cols-2 gap-4">
-                            <div>
-                              <label htmlFor="driver-vehicle-type" className="block text-sm font-semibold text-slate-700 mb-2">
-                                نوع المركبة
-                              </label>
-                              <select
-                                id="driver-vehicle-type"
-                                name="driver-vehicle-type"
-                                value={driverForm.vehicleType}
-                                onChange={(e) => setDriverForm({ ...driverForm, vehicleType: e.target.value })}
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
-                              >
-                                <option value="motorcycle">دراجة نارية</option>
-                                <option value="car">سيارة صغيرة</option>
-                                <option value="bicycle">دراجة هوائية</option>
-                              </select>
-                            </div>
-                            {[
-                              { label: "رقم اللوحة", ph: "HON-4821", key: "plateNumber" },
-                              { label: "موديل المركبة", ph: "هوندا CB500", key: "vehicleModel" },
-                              { label: "سنة الصنع", ph: "2022", key: "vehicleYear" },
-                              { label: "لون المركبة", ph: "أحمر", key: "vehicleColor" },
-                              { label: "رقم الشاسيه", ph: "XXXXXXXXXXXXXXXXX", key: "chassisNumber" },
-                            ].map((f) => (
-                              <div key={f.key}>
-                                <label htmlFor={`driver-step2-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
-                                  {f.label}
-                                </label>
-                                <input
-                                  id={`driver-step2-${f.key}`}
-                                  name={`driver-step2-${f.key}`}
-                                  type="text"
-                                  placeholder={f.ph}
-                                  value={driverForm[f.key as keyof typeof driverForm]}
-                                  onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
+                                  required
                                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
                                 />
                               </div>
                             ))}
+                            <div>
+                              <label htmlFor="driver-city" className="block text-sm font-semibold text-slate-700 mb-2">
+                                مدينة الإقامة
+                              </label>
+                              <select
+                                id="driver-city"
+                                name="driver-city"
+                                value={driverForm.city}
+                                onChange={(e) => setDriverForm({ ...driverForm, city: e.target.value })}
+                                required
+                                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
+                              >
+                                <option value="">اختر مدينتك</option>
+                                {cities.map((c) => (
+                                  <option key={c._id} value={c._id}>{c.name}</option>
+                                ))}
+                              </select>
+                              {cities.length === 0 && (
+                                <p className="text-xs text-slate-400 mt-1">لا توجد مدن متاحة حالياً، يرجى المحاولة لاحقاً</p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex gap-3 mt-6">
                           <button
-                            onClick={() => setDriverStep(1)}
-                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
-                          >
-                            → السابق
-                          </button>
-                          <button
-                            onClick={() => setDriverStep(3)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+                            onClick={() => {
+                              if (!driverForm.city) {
+                                setMessage('يرجى اختيار مدينة الإقامة')
+                                return
+                              }
+                              setMessage('')
+                              setDriverStep(2)
+                            }}
+                            className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
                           >
                             التالي ←
                           </button>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Step 3 */}
-                    {driverStep === 3 && (
-                      <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                        <h2 className="text-base font-black text-slate-900 mb-6">
-                          رفع المستندات
-                        </h2>
-                        <div className="space-y-4">
-                          {[
-                            { label: "صورة الهوية الوطنية (وجهين)" },
-                            { label: "استمارة تسجيل المركبة" },
-                            { label: "صورة شخصية واضحة" },
-                            { label: "شهادة فحص المركبة" },
-                          ].map((doc) => (
-                            <div
-                              key={doc.label}
-                              className="flex items-center gap-4 border-2 border-dashed border-slate-200 rounded-xl p-4 hover:border-green-400 transition-colors cursor-pointer group"
+                      {/* Step 2 */}
+                      {driverStep === 2 && (
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                          <h2 className="text-base font-black text-slate-900 mb-6">
+                            بيانات المركبة
+                          </h2>
+                          <div className="space-y-4">
+                            <div className="grid sm:grid-cols-2 gap-4">
+                              <div>
+                                <label htmlFor="driver-vehicle-type" className="block text-sm font-semibold text-slate-700 mb-2">
+                                  نوع المركبة
+                                </label>
+                                <select
+                                  id="driver-vehicle-type"
+                                  name="driver-vehicle-type"
+                                  value={driverForm.vehicleType}
+                                  onChange={(e) => setDriverForm({ ...driverForm, vehicleType: e.target.value })}
+                                  required
+                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
+                                >
+                                  <option value="motorcycle">دراجة نارية</option>
+                                  <option value="car">سيارة صغيرة</option>
+                                  <option value="bicycle">دراجة هوائية</option>
+                                </select>
+                              </div>
+                              {[
+                                { label: "رقم اللوحة", ph: "HON-4821", key: "plateNumber" },
+                                { label: "موديل المركبة", ph: "هوندا CB500", key: "vehicleModel" },
+                                { label: "سنة الصنع", ph: "2022", key: "vehicleYear" },
+                                { label: "لون المركبة", ph: "أحمر", key: "vehicleColor" },
+                                { label: "رقم الشاسيه", ph: "XXXXXXXXXXXXX", key: "chassisNumber" },
+                              ].map((f) => (
+                                <div key={f.key}>
+                                  <label htmlFor={`driver-step2-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-2">
+                                    {f.label}
+                                  </label>
+                                  <input
+                                    id={`driver-step2-${f.key}`}
+                                    name={`driver-step2-${f.key}`}
+                                    type="text"
+                                    placeholder={f.ph}
+                                    value={driverForm[f.key as keyof typeof driverForm]}
+                                    onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
+                                    required
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-3 mt-6">
+                            <button
+                              onClick={() => setDriverStep(1)}
+                              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
                             >
+                              → السابق
+                            </button>
+                            <button
+                              onClick={() => setDriverStep(3)}
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+                            >
+                              التالي ←
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-                              <div className="flex-1">
+                      {/* Step 3 */}
+                      {driverStep === 3 && (
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                          <h2 className="text-base font-black text-slate-900 mb-2">
+                            المستندات المطلوبة
+                          </h2>
+                          <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                            لا حاجة لرفع أي ملفات من هنا. سيقوم فريقنا بإضافة صور مستنداتك
+                            إلى حسابك من خلال لوحة تحكم الإدارة بعد مطابقتها في مقر الشركة
+                            أو أحد مراكزها المعتمدة، وفق المستندات التالية:
+                          </p>
+                          <div className="space-y-3">
+                            {[
+                              { label: "صورة الهوية الوطنية (وجهين)" },
+                              { label: "استمارة تسجيل المركبة" },
+                              { label: "صورة شخصية واضحة" },
+                              { label: "شهادة فحص المركبة" },
+                            ].map((doc) => (
+                              <div
+                                key={doc.label}
+                                className="flex items-center gap-3 border border-slate-200 rounded-xl p-4"
+                              >
+                                <span className="text-green-600">📄</span>
                                 <div className="font-semibold text-slate-700 text-sm">
                                   {doc.label}
                                 </div>
-                                <div className="text-xs text-slate-400 mt-0.5">
-                                  اضغط للرفع — JPG, PNG, PDF
-                                </div>
                               </div>
-                              <div className="text-xs bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg font-medium">
-                                رفع
-                              </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                          <div className="flex gap-3 mt-6">
+                            <button
+                              onClick={() => setDriverStep(2)}
+                              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
+                            >
+                              → السابق
+                            </button>
+                            <button
+                              onClick={() => setDriverStep(4)}
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+                            >
+                              التالي ←
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex gap-3 mt-6">
-                          <button
-                            onClick={() => setDriverStep(2)}
-                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
-                          >
-                            → السابق
-                          </button>
-                          <button
-                            onClick={() => setDriverStep(4)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
-                          >
-                            التالي ←
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Step 4 */}
-                    {driverStep === 4 && (
-                      <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                        <h2 className="text-base font-black text-slate-900 mb-2">
-                          الإقرار والتأكيد
-                        </h2>
-                        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6">
-                          <div className="flex items-start gap-3">
-                            <span className="text-amber-500 text-xl mt-0.5">⚠️</span>
+                      {/* Step 4 */}
+                      {driverStep === 4 && (
+                        <div className="bg-white">
+                          <h2 className="text-base font-black text-slate-900 mb-2">
+                            الإقرار والتأكيد
+                          </h2>
+                          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6">
+
                             <div>
-                              <p className="font-bold text-amber-800 mb-2 text-sm">
-                                شرط استكمال التسجيل
-                              </p>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-amber-500 text-xl">⚠️</span>
+                                <p className="font-bold text-amber-800 text-sm">
+                                  شرط استكمال التسجيل
+                                </p>
+                              </div>
                               <p className="text-amber-700 text-sm leading-relaxed">
                                 يُقرّ المندوب بأن التسجيل الإلكتروني هو تسجيل مبدئي فقط،
                                 ولا يتم تفعيل الحساب أو السماح له بتقديم خدمات التوصيل
@@ -2249,144 +2723,160 @@ export default function App() {
                                 </li>
                               </ol>
                             </div>
-                          </div>
-                        </div>
-                        <label className="flex items-start gap-3 cursor-pointer mb-6">
-                          <input
-                            id="driver-agreement"
-                            name="driver-agreement"
-                            type="checkbox"
-                            className="mt-1 w-5 h-5 accent-green-600 cursor-pointer"
-                          />
-                          <span className="text-sm text-slate-700 leading-relaxed">
-                            أقرّ بأنني قرأت وفهمت شروط استكمال التسجيل وأوافق عليها
-                            كاملةً
-                          </span>
-                        </label>
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => setDriverStep(3)}
-                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
-                          >
-                            → السابق
-                          </button>
-                          <button
-                            onClick={handleDriverRegister}
-                            disabled={loading}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
-                          >
-                            {loading ? 'جاري الإرسال...' : 'إرسال الطلب ✓'}
-                          </button>
-                        </div>
-                        {message && (
-                          <div className={`text-sm ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                            {message}
-                          </div>
-                        )}
 
-                        {/* Earnings preview */}
-                        <div className="mt-6 bg-green-50 rounded-2xl p-4 border border-green-100">
-                          <h3 className="font-black text-green-800 mb-3 text-sm">
-                            سجل الأرباح — هذا الشهر
-                          </h3>
-                          <div className="space-y-2">
-                            {driverEarnings.length > 0 ? (
-                              driverEarnings.map((r: any) => (
-                                <div
-                                  key={r.date}
-                                  className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-green-100"
-                                >
-                                  <span className="text-sm text-slate-600 font-medium">
-                                    {r.date}
-                                  </span>
-                                  <span className="text-xs text-slate-400">
-                                    {r.orders} طلبات
-                                  </span>
-                                  <span className="font-black text-green-700 text-sm">
-                                    {r.earned} جنيه
-                                  </span>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-center py-4 text-sm text-slate-500">
-                                لا توجد أرباح مسجلة لهذا الشهر
-                              </div>
-                            )}
                           </div>
+                          <label className="flex items-start gap-3 cursor-pointer mb-6">
+                            <input
+                              id="driver-agreement"
+                              name="driver-agreement"
+                              type="checkbox"
+                              checked={agreedToTerms}
+                              onChange={(e) => setAgreedToTerms(e.target.checked)}
+                              required
+                              className="mt-1 w-5 h-5 accent-green-600 cursor-pointer"
+                            />
+                            <span className="text-sm text-slate-700 leading-relaxed">
+                              أقرّ بأنني قرأت وفهمت شروط استكمال التسجيل وأوافق عليها
+                              كاملةً
+                            </span>
+                          </label>
+                          <div className="flex gap-3 mb-3">
+                            <button
+                              onClick={() => setDriverStep(3)}
+                              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-colors"
+                            >
+                              → السابق
+                            </button>
+                            <button
+                              onClick={handleDriverRegister}
+                              disabled={loading || !agreedToTerms}
+                              title={!agreedToTerms ? 'يجب الموافقة على الشروط والسياسات أولاً' : undefined}
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {loading ? 'جاري الإرسال...' : 'إرسال الطلب ✓'}
+                            </button>
+                          </div>
+                          {message && (
+                            <div className={`text-sm ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                              {message}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+                )}
+              </>
+            )}
+          </div>
+        )
+      }
 
       {/* ─── OTP VERIFICATION PAGE ─── */}
-      {activeView === "otp" && (
-        <div className="top-spacing max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-          <div className="mb-8">
-            <h1 className="text-sm font-black text-slate-900">
-              التحقق من الحساب
-            </h1>
-            <p className="text-slate-500 mt-1">
-              أدخل رمز التحقق المرسل إلى بريدك الإلكتروني
-            </p>
-          </div>
+      {
+        activeView === "otp" && (
+          <div className="top-spacing max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+            <div className="mb-8">
+              <h1 className="text-sm font-black text-slate-900">
+                التحقق من الحساب
+              </h1>
+              <p className="text-slate-500 mt-1">
+                أدخل رمز التحقق المرسل إلى بريدك الإلكتروني
+              </p>
+            </div>
 
-          <div className="grid lg:grid-cols-5 gap-8">
-            <div className="lg:col-span-2">
-              <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
-                <h2 className="text-sm font-black text-slate-900 mb-6">
-                  أدخل رمز OTP
-                </h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      رمز التحقق (6 أرقام)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="123456"
-                      value={otpForm.otp}
-                      onChange={(e) => setOtpForm({ ...otpForm, otp: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
-                      maxLength={6}
-                    />
-                  </div>
-                  {message && (
-                    <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
-                      {message}
+            <div className="grid lg:grid-cols-5 gap-8">
+              <div className="lg:col-span-2 px-4">
+                <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4">
+                  <h2 className="text-sm font-black text-slate-900 mb-6">
+                    أدخل رمز OTP
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        رمز التحقق (6 أرقام)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="123456"
+                        value={otpForm.otp}
+                        onChange={(e) => setOtpForm({ ...otpForm, otp: e.target.value })}
+                        required
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest"
+                        maxLength={6}
+                      />
                     </div>
-                  )}
-                  <button
-                    onClick={handleVerifyOTP}
-                    disabled={loading}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {loading ? 'جاري التحقق...' : 'تحقق من الرمز'}
-                  </button>
-                  <button
-                    onClick={handleResendOTP}
-                    disabled={loading}
-                    className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
-                  </button>
-                  <button
-                    onClick={() => setActiveView('landing')}
-                    className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
-                  >
-                    العودة للرئيسية
-                  </button>
+                    {message && (
+                      <div className={`text-sm px-4 ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                        {message}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleVerifyOTP}
+                      disabled={loading}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      {loading ? 'جاري التحقق...' : 'تحقق من الرمز'}
+                    </button>
+                    <button
+                      onClick={handleResendOTP}
+                      disabled={loading}
+                      className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
+                    </button>
+                    <button
+                      onClick={() => setActiveView('landing')}
+                      className="w-full text-sm text-slate-500 hover:text-green-600 transition-colors"
+                    >
+                      العودة للرئيسية
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
+
+      {/* ─── DRIVER: REGISTRATION SUBMITTED, AWAITING APPROVAL ─── */}
+      {
+        activeView === "driver-pending" && (
+          <div className="top-spacing max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-8 text-center">
+              <div className="text-5xl mb-4">✅</div>
+              <h1 className="text-lg font-black text-slate-900 mb-2">
+                تم التسجيل بنجاح
+              </h1>
+              <p className="text-slate-600 leading-relaxed mb-2">
+                شكرًا لانضمامك إلى شبكة مندوبي وصل. تم استلام طلب تسجيلك وبياناتك بنجاح.
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 my-5 flex items-start gap-3 text-right">
+                <span className="text-2xl">⏳</span>
+                <p className="text-sm text-yellow-800 leading-relaxed">
+                  حسابك الآن قيد المراجعة من قبل الإدارة. يرجى الانتظار حتى تتم الموافقة
+                  على طلبك وتفعيل حسابك، وسيتم إعلامك فور اعتماد التسجيل. لن تتمكن من
+                  استقبال طلبات التوصيل قبل ذلك.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => setActiveView('driver')}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                >
+                  الذهاب إلى حسابي
+                </button>
+                <button
+                  onClick={() => setActiveView('landing')}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-3 rounded-xl transition-colors"
+                >
+                  العودة للرئيسية
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
 
       {/* ─── MOBILE BOTTOM NAV ─── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-green-500/40 border-t border-green-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] h-12">
@@ -2493,6 +2983,6 @@ export default function App() {
 
       {/* Spacer so content clears the bottom nav on mobile */}
       <div className="md:hidden h-12" />
-    </div>
+    </div >
   )
 }

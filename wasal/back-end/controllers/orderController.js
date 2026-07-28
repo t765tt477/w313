@@ -1,6 +1,7 @@
 import Order from '../models/Order.js';
 import dispatchService from '../services/dispatchService.js';
-import { broadcastToAdmins } from './notificationController.js';
+import { broadcastToAdmins, createNotification } from './notificationController.js';
+import { emitToUser } from '../services/socketService.js';
 
 // Create order
 export const createOrder = async (req, res) => {
@@ -108,9 +109,13 @@ export const cancelOrder = async (req, res) => {
       return res.status(400).json({ message: 'Cannot cancel order in progress' });
     }
 
+    const { reason = 'client' } = req.body;
+
     order.status = 'cancelled';
     order.dispatchStatus = 'cancelled';
     order.dispatchDriver = null;
+    order.cancelledAt = new Date();
+    order.cancelReason = reason;
     await order.save();
     await dispatchService.cancelDispatch(order._id);
 
@@ -120,10 +125,57 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
+// Check and cancel expired orders (10 minutes timeout)
+export const checkExpiredOrders = async () => {
+  try {
+    const timeoutMinutes = 10;
+    const timeoutDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+    const expiredOrders = await Order.find({
+      status: 'pending',
+      createdAt: { $lt: timeoutDate },
+      cancelReason: null
+    });
+
+    for (const order of expiredOrders) {
+      order.status = 'cancelled';
+      order.dispatchStatus = 'no_drivers_available';
+      order.cancelledAt = new Date();
+      order.cancelReason = 'timeout';
+      await order.save();
+      await dispatchService.cancelDispatch(order._id);
+
+      // Notify client about timeout
+      await createNotification(
+        order.client,
+        'order_timeout',
+        'انتهى وقت الطلب',
+        'عذراً، لم يتم العثور على مندوب متاح في الوقت المحدد. يرجى المحاولة مرة أخرى بعد قليل.',
+        { orderId: order._id },
+        'Client',
+        true
+      );
+
+      emitToUser(order.client, 'order:timeout', {
+        orderId: order._id,
+        message: 'عذراً، لم يتم العثور على مندوب متاح في الوقت المحدد. يرجى المحاولة مرة أخرى بعد قليل.'
+      });
+    }
+
+    console.log(`Checked expired orders: ${expiredOrders.length} orders cancelled due to timeout`);
+  } catch (error) {
+    console.error('Error checking expired orders:', error);
+  }
+};
+
 // Rate order
 export const rateOrder = async (req, res) => {
   try {
-    const { rating } = req.body;
+    const rating = Number(req.body.rating);
+
+    if (!rating || !Number.isFinite(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'التقييم يجب أن يكون رقمًا بين 1 و 5' });
+    }
 
     const order = await Order.findById(req.params.id);
     if (!order) {
@@ -138,16 +190,27 @@ export const rateOrder = async (req, res) => {
       return res.status(400).json({ message: 'Can only rate delivered orders' });
     }
 
+    if (order.rating) {
+      return res.status(400).json({ message: 'تم تقييم هذا الطلب مسبقًا' });
+    }
+
     // Update driver rating
     const Driver = (await import('../models/Driver.js')).default;
     const driver = await Driver.findById(order.driver);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
 
-    const totalRating = driver.rating * driver.ratingCount + rating;
-    driver.ratingCount += 1;
+    const totalRating = (driver.rating || 0) * (driver.ratingCount || 0) + rating;
+    driver.ratingCount = (driver.ratingCount || 0) + 1;
     driver.rating = totalRating / driver.ratingCount;
     await driver.save();
 
-    res.status(200).json({ message: 'Rating submitted' });
+    order.rating = rating;
+    order.ratedAt = new Date();
+    await order.save();
+
+    res.status(200).json({ message: 'Rating submitted', rating: order.rating, driverRating: driver.rating });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

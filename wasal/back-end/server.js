@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import { initSocket } from './services/socketService.js';
 import { verifyEmailTransport } from './services/emailService.js';
+import { startOrderCleanupService } from './services/orderCleanupService.js';
 
 dotenv.config();
 
@@ -89,6 +90,7 @@ app.get('/api/health', (req, res) => {
 });
 
 initSocket(httpServer);
+startOrderCleanupService();
 
 const PORT = process.env.PORT || 50000;
 httpServer.listen(PORT, () => {

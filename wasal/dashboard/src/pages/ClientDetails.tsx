@@ -169,7 +169,7 @@ export default function ClientDetails() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Client Info Card */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
           <h2 className="text-xl font-black text-green-800 mb-4">معلومات الزبون</h2>
@@ -272,7 +272,7 @@ export default function ClientDetails() {
         </div>
 
         {/* Stats Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <h2 className="text-xl font-black text-green-800 mb-4">الإحصائيات</h2>
 
           <div className="space-y-4">

@@ -26,7 +26,7 @@ export const adminAPI = {
     api.post('/admin/drivers/credit', { driverId, amount, description }),
   getDriverDetails: (driverId: string) => api.get(`/admin/drivers/${driverId}`),
   approveDriver: (driverId: string) => api.put(`/admin/drivers/${driverId}/approve`),
-  updateDriverImages: (driverId: string, images: { profileImage?: string; vehicleImage?: string; licenseImage?: string }) =>
+  updateDriverImages: (driverId: string, images: { profileImage?: string; vehicleImage?: string; licenseImage?: string; nationalIdImage?: string; inspectionCertificateImage?: string }) =>
     api.put(`/admin/drivers/${driverId}/images`, { driverId, ...images }),
   getAllOrders: () => api.get('/admin/orders'),
   getAllClients: () => api.get('/admin/clients'),
@@ -34,6 +34,8 @@ export const adminAPI = {
   createAdmin: (data: any) => api.post('/admin/admins', data),
   updateAdmin: (id: string, data: any) => api.put(`/admin/admins/${id}`, data),
   deleteAdmin: (id: string) => api.delete(`/admin/admins/${id}`),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.put('/admin/change-password', data),
 };
 
 export const cityAPI = {

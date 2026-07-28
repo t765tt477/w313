@@ -42,20 +42,24 @@ export const updateProfile = async (req, res) => {
 };
 
 // Change password
+// Only drivers (مندوب) and clients (زبون) may change their own password through
+// this route, and this route only ever touches the `password` field - no other
+// account data is read from the request body or written here.
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
-    let user;
-    user = await Admin.findById(req.user.id).select('+password');
-    if (!user) {
-      user = await Driver.findById(req.user.id).select('+password');
-    }
+    // Admins are intentionally excluded - only look them up in Driver/Client.
+    let user = await Driver.findById(req.user.id).select('+password');
     if (!user) {
       user = await Client.findById(req.user.id).select('+password');
     }
 
     if (!user) {
+      const isAdmin = await Admin.exists({ _id: req.user.id });
+      if (isAdmin) {
+        return res.status(403).json({ message: 'غير مسموح: تغيير كلمة المرور متاح فقط للمندوب والزبون' });
+      }
       return res.status(404).json({ message: 'User not found' });
     }
 

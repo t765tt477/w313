@@ -12,11 +12,15 @@ import {
   updateAdmin,
   deleteAdmin,
   toggleAdminSuspension,
-  updateDriverImages
+  updateDriverImages,
+  changeMyPassword
 } from '../controllers/adminController.js';
 import { protect, authorize, authorizeSuperAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Self password change (any staff member: admin or super_admin)
+router.put('/change-password', protect, authorize('admin', 'super_admin'), changeMyPassword);
 
 // Driver routes (admin and super_admin)
 router.get('/drivers', protect, authorize('admin', 'super_admin'), getAllDrivers);

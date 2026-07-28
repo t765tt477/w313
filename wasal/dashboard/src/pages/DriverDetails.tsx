@@ -20,6 +20,8 @@ interface Driver {
   profileImage?: string;
   vehicleImage?: string;
   licenseImage?: string;
+  nationalIdImage?: string;
+  inspectionCertificateImage?: string;
 }
 
 export default function DriverDetails() {
@@ -44,6 +46,8 @@ export default function DriverDetails() {
   const [profileImageUrl, setProfileImageUrl] = useState('');
   const [vehicleImageUrl, setVehicleImageUrl] = useState('');
   const [licenseImageUrl, setLicenseImageUrl] = useState('');
+  const [nationalIdImageUrl, setNationalIdImageUrl] = useState('');
+  const [inspectionCertificateImageUrl, setInspectionCertificateImageUrl] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -142,13 +146,17 @@ export default function DriverDetails() {
       await adminAPI.updateDriverImages(driver._id, {
         profileImage: profileImageUrl || undefined,
         vehicleImage: vehicleImageUrl || undefined,
-        licenseImage: licenseImageUrl || undefined
+        licenseImage: licenseImageUrl || undefined,
+        nationalIdImage: nationalIdImageUrl || undefined,
+        inspectionCertificateImage: inspectionCertificateImageUrl || undefined
       });
       alert('تم تحديث روابط الصور بنجاح');
       fetchDriverDetails();
       setProfileImageUrl('');
       setVehicleImageUrl('');
       setLicenseImageUrl('');
+      setNationalIdImageUrl('');
+      setInspectionCertificateImageUrl('');
       setIsEditingImages(false);
     } catch (error: any) {
       alert(error.response?.data?.message || 'فشل تحديث الصور');
@@ -166,6 +174,8 @@ export default function DriverDetails() {
     setProfileImageUrl('');
     setVehicleImageUrl('');
     setLicenseImageUrl('');
+    setNationalIdImageUrl('');
+    setInspectionCertificateImageUrl('');
   };
 
   const handleStartChat = async () => {
@@ -205,7 +215,7 @@ export default function DriverDetails() {
 
               <button
                 onClick={handleEdit}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
               >
                 <Edit className="w-4 h-4" />
                 تعديل
@@ -239,9 +249,9 @@ export default function DriverDetails() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="flex flex-wrap gap-4 mb-10">
         {/* Driver Info Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <h2 className="text-xl font-black text-green-800 mb-4">معلومات المندوب</h2>
 
           {/* Images Section */}
@@ -251,7 +261,7 @@ export default function DriverDetails() {
               {!isEditingImages && (
                 <button
                   onClick={handleStartEditImages}
-                  className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 p-1 rounded-lg transition-colors"
+                  className="flex items-center gap-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold px-3 p-2 rounded-lg transition-colors"
                 >
                   <Edit className="w-3 h-3" />
                   تعديل الصور
@@ -342,12 +352,68 @@ export default function DriverDetails() {
                   />
                 )}
               </div>
+
+              {/* National ID Image */}
+              <div className="flex flex-col items-center">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">صورة الهوية الوطنية</h3>
+                {driver.nationalIdImage ? (
+                  <img
+                    src={driver.nationalIdImage}
+                    alt="National ID"
+                    className="w-32 h-24 rounded-lg object-cover mb-3 border-2 border-green-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-32 h-24 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+                    <User className="w-12 h-12 text-green-600" />
+                  </div>
+                )}
+                {isEditingImages && (
+                  <input
+                    type="text"
+                    value={nationalIdImageUrl}
+                    onChange={(e) => setNationalIdImageUrl(e.target.value)}
+                    placeholder="رابط صورة الهوية الوطنية"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
+                  />
+                )}
+              </div>
+
+              {/* Inspection Certificate Image */}
+              <div className="flex flex-col items-center">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">شهادة فحص المركبة</h3>
+                {driver.inspectionCertificateImage ? (
+                  <img
+                    src={driver.inspectionCertificateImage}
+                    alt="Inspection Certificate"
+                    className="w-32 h-24 rounded-lg object-cover mb-3 border-2 border-green-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-32 h-24 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+                    <Truck className="w-12 h-12 text-green-600" />
+                  </div>
+                )}
+                {isEditingImages && (
+                  <input
+                    type="text"
+                    value={inspectionCertificateImageUrl}
+                    onChange={(e) => setInspectionCertificateImageUrl(e.target.value)}
+                    placeholder="رابط شهادة فحص المركبة"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
+                  />
+                )}
+              </div>
             </section>
             {isEditingImages && (
               <div className="flex gap-2">
                 <button
                   onClick={handleImagesUpdate}
-                  disabled={updatingImages || (!profileImageUrl && !vehicleImageUrl && !licenseImageUrl)}
+                  disabled={updatingImages || (!profileImageUrl && !vehicleImageUrl && !licenseImageUrl && !nationalIdImageUrl && !inspectionCertificateImageUrl)}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   <Link className="w-4 h-4" />
@@ -482,7 +548,7 @@ export default function DriverDetails() {
         </div>
 
         {/* Stats Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white flex-1 rounded-xl p-3 shadow-sm border border-slate-100">
           <h2 className="text-xl font-black text-green-800 mb-4">الإحصائيات</h2>
 
           <div className="space-y-4">
@@ -529,7 +595,7 @@ export default function DriverDetails() {
         </div>
 
         {/* Status Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 md:col-span-2">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 md:col-span-2">
           <h2 className="text-xl font-black text-green-800 mb-4">الحالة</h2>
 
           <div className="flex gap-6">
@@ -575,7 +641,7 @@ export default function DriverDetails() {
           </div>
 
           {/* Add Credit Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 md:col-span-2">
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 md:col-span-2">
             <h2 className="text-xl font-black text-green-800 mb-4">إضافة رصيد للمندوب</h2>
 
             <form onSubmit={handleAddCredit} className="grid grid-cols-1 md:grid-cols-3 gap-4">

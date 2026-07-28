@@ -31,7 +31,7 @@ export const orderAPI = {
   createOrder: (data: any) => api.post('/orders', data),
   getUserOrders: () => api.get('/orders'),
   getOrderById: (id: string) => api.get(`/orders/${id}`),
-  cancelOrder: (id: string) => api.put(`/orders/${id}/cancel`),
+  cancelOrder: (id: string, data?: any) => api.put(`/orders/${id}/cancel`, data),
   rateOrder: (id: string, rating: number) => api.post(`/orders/${id}/rate`, { rating }),
 };
 
