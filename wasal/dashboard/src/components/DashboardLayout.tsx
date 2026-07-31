@@ -3,7 +3,7 @@ import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import { RefreshCw } from 'lucide-react';
 
-type Tab = 'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs' | 'cities';
+type Tab = 'overview' | 'drivers' | 'orders' | 'users' | 'analytics' | 'settings' | 'admin-management' | 'logs' | 'cities' | 'chat' | 'recharge-requests';
 
 interface DashboardLayoutProps {
   activeTab: Tab;

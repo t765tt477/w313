@@ -25,6 +25,7 @@ export const adminAPI = {
   addDriverCredit: (driverId: string, amount: number, description: string) =>
     api.post('/admin/drivers/credit', { driverId, amount, description }),
   getDriverDetails: (driverId: string) => api.get(`/admin/drivers/${driverId}`),
+  getDriverBalanceTransactions: (driverId: string) => api.get(`/admin/drivers/${driverId}/balance-transactions`),
   approveDriver: (driverId: string) => api.put(`/admin/drivers/${driverId}/approve`),
   updateDriverImages: (driverId: string, images: { profileImage?: string; vehicleImage?: string; licenseImage?: string; nationalIdImage?: string; inspectionCertificateImage?: string }) =>
     api.put(`/admin/drivers/${driverId}/images`, { driverId, ...images }),
@@ -34,8 +35,23 @@ export const adminAPI = {
   createAdmin: (data: any) => api.post('/admin/admins', data),
   updateAdmin: (id: string, data: any) => api.put(`/admin/admins/${id}`, data),
   deleteAdmin: (id: string) => api.delete(`/admin/admins/${id}`),
+  toggleAdminSuspension: (id: string, reason?: string) =>
+    api.put(`/admin/admins/${id}/suspend`, { reason }),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/admin/change-password', data),
+  getRechargeRequests: (status?: string) =>
+    api.get('/admin/recharge-requests', { params: status ? { status } : undefined }),
+  approveRechargeRequest: (id: string, amount: number) =>
+    api.put(`/admin/recharge-requests/${id}/approve`, { amount }),
+  rejectRechargeRequest: (id: string, reason?: string) =>
+    api.put(`/admin/recharge-requests/${id}/reject`, { reason }),
+};
+
+export const pricingAPI = {
+  getAllPricingSettings: () => api.get('/pricing'),
+  getPricingByCity: (cityId: string) => api.get(`/pricing/city/${cityId}`),
+  upsertPricingSettings: (cityId: string, data: any) => api.put(`/pricing/city/${cityId}`, data),
+  bulkUpdatePricingSettings: (settings: any[]) => api.put('/pricing/bulk', { settings }),
 };
 
 export const cityAPI = {

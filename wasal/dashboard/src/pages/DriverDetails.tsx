@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { adminAPI, chatAPI } from '../services/api';
 import DashboardLayout from '../components/DashboardLayout';
-import { Mail, Phone, MapPin, Truck, DollarSign, Star, CheckCircle, Clock, Edit, Trash2, Save, X, Link, User, MessageCircle } from 'lucide-react';
+import Modal from '../components/Modal';
+import { Mail, Phone, MapPin, Truck, DollarSign, Star, CheckCircle, Clock, Edit, Trash2, Save, X, Link, User, MessageCircle, Edit2 } from 'lucide-react';
 
 interface Driver {
   _id: string;
@@ -24,6 +25,18 @@ interface Driver {
   inspectionCertificateImage?: string;
 }
 
+interface BalanceTransaction {
+  _id: string;
+  type: 'recharge_bank' | 'recharge_cash' | 'commission_deduction' | 'adjustment';
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  order?: { orderNumber?: string } | null;
+  performedBy?: { name?: string } | null;
+  note?: string;
+  createdAt: string;
+}
+
 export default function DriverDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -33,6 +46,8 @@ export default function DriverDetails() {
   const [creditAmount, setCreditAmount] = useState('');
   const [creditDescription, setCreditDescription] = useState('');
   const [addingCredit, setAddingCredit] = useState(false);
+  const [transactions, setTransactions] = useState<BalanceTransaction[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -50,9 +65,27 @@ export default function DriverDetails() {
   const [inspectionCertificateImageUrl, setInspectionCertificateImageUrl] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Modal states
+  const [addCreditModalOpen, setAddCreditModalOpen] = useState(false);
+  const [editDriverModalOpen, setEditDriverModalOpen] = useState(false);
+  const [editImagesModalOpen, setEditImagesModalOpen] = useState(false);
+
   useEffect(() => {
     fetchDriverDetails();
+    fetchTransactions();
   }, [id]);
+
+  const fetchTransactions = async () => {
+    try {
+      if (!id) return;
+      const response = await adminAPI.getDriverBalanceTransactions(id);
+      setTransactions(response.data.transactions || []);
+    } catch (error) {
+      console.error('Error fetching balance transactions:', error);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
 
   const fetchDriverDetails = async () => {
     try {
@@ -70,6 +103,7 @@ export default function DriverDetails() {
     setRefreshing(true);
     try {
       await fetchDriverDetails();
+      await fetchTransactions();
     } finally {
       setRefreshing(false);
     }
@@ -86,6 +120,7 @@ export default function DriverDetails() {
       setCreditAmount('');
       setCreditDescription('');
       fetchDriverDetails();
+      fetchTransactions();
     } catch (error: any) {
       alert(error.response?.data?.message || 'فشل إضافة الرصيد');
     } finally {
@@ -103,6 +138,7 @@ export default function DriverDetails() {
       vehicleNumber: driver.vehicleNumber
     });
     setIsEditing(true);
+    setEditDriverModalOpen(true);
   };
 
   const handleSaveEdit = async () => {
@@ -167,6 +203,7 @@ export default function DriverDetails() {
 
   const handleStartEditImages = () => {
     setIsEditingImages(true);
+    setEditImagesModalOpen(true);
   };
 
   const handleCancelEditImages = () => {
@@ -210,48 +247,26 @@ export default function DriverDetails() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-black text-green-800">بيانات المندوب</h1>
         <div className="flex gap-2">
-          {!isEditing ? (
-            <>
-
-              <button
-                onClick={handleEdit}
-                className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
-              >
-                <Edit className="w-4 h-4" />
-                تعديل
-              </button>
-              <button
-                onClick={handleDelete}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                حذف
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleSaveEdit}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
-              >
-                <Save className="w-4 h-4" />
-                حفظ
-              </button>
-              <button
-                onClick={handleCancelEdit}
-                className="flex items-center gap-2 bg-slate-600 hover:bg-slate-700 text-white font-semibold px-4 p-1 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" />
-                إلغاء
-              </button>
-            </>
-          )}
+          <button
+            onClick={handleEdit}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white p-2 rounded-lg transition-colors"
+            title="تعديل"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleDelete}
+            className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-colors"
+            title="حذف"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-4 mb-10">
         {/* Driver Info Card */}
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-xl p-4 shadow-xs border border-slate-100">
           <h2 className="text-xl font-black text-green-800 mb-4">معلومات المندوب</h2>
 
           {/* Images Section */}
@@ -431,124 +446,95 @@ export default function DriverDetails() {
           </div>
 
           <div className="space-y-4">
-            {isEditing ? (
-              <>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">الهاتف</label>
-                  <input
-                    type="text"
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
-                  <input
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">نوع المركبة</label>
-                  <input
-                    type="text"
-                    value={editForm.vehicleType}
-                    onChange={(e) => setEditForm({ ...editForm, vehicleType: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">رقم المركبة</label>
-                  <input
-                    type="text"
-                    value={editForm.vehicleNumber}
-                    onChange={(e) => setEditForm({ ...editForm, vehicleNumber: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-start gap-3">
-                  <div className="bg-green-100 p-2 rounded-lg">
-                    <Truck className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-500 mb-1">الاسم</div>
-                    <div className="text-lg font-bold text-slate-800">{driver.name || 'غير معروف'}</div>
-                  </div>
-                </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
+              <div className="text-sm text-slate-900">{driver.name}</div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">الهاتف</label>
+              <div className="text-sm text-slate-900">{driver.phone}</div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
+              <div className="text-sm text-slate-900">{driver.email}</div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">نوع المركبة</label>
+              <div className="text-sm text-slate-900">{driver.vehicleType}</div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">رقم المركبة</label>
+              <div className="text-sm text-slate-900">{driver.vehicleNumber}</div>
+            </div>
+          </div>
 
-                <div className="flex items-start gap-3">
-                  <div className="bg-blue-100 p-2 rounded-lg">
-                    <Phone className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-500 mb-1">الهاتف</div>
-                    <div className="text-lg font-semibold text-slate-800">{driver.phone || 'غير متوفر'}</div>
-                  </div>
-                </div>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-green-100 p-2 rounded-lg">
+                <Truck className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <div className="text-sm text-slate-500 mb-1">الاسم</div>
+                <div className="text-lg font-bold text-slate-800">{driver.name || 'غير معروف'}</div>
+              </div>
+            </div>
 
-                <div
-                  className="flex items-start gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors"
-                  onClick={() => window.open(`mailto:${driver.email}`, '_blank')}
-                >
-                  <div className="bg-yellow-100 p-2 rounded-lg">
-                    <Mail className="w-5 h-5 text-yellow-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-500 mb-1">البريد الإلكتروني</div>
-                    <div className="text-lg font-semibold text-blue-600 hover:underline">{driver.email || 'غير متوفر'}</div>
-                  </div>
-                </div>
+            <div className="flex items-start gap-3">
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <Phone className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <div className="text-sm text-slate-500 mb-1">الهاتف</div>
+                <div className="text-lg font-semibold text-slate-800">{driver.phone || 'غير متوفر'}</div>
+              </div>
+            </div>
 
-                <div className="flex items-start gap-3">
-                  <div className="bg-orange-100 p-2 rounded-lg">
-                    <Truck className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-500 mb-1">نوع المركبة</div>
-                    <div className="text-base text-slate-800">{driver.vehicleType || 'غير متوفر'}</div>
-                  </div>
-                </div>
+            <div
+              className="flex items-start gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors"
+              onClick={() => window.open(`mailto:${driver.email}`, '_blank')}
+            >
+              <div className="bg-yellow-100 p-2 rounded-lg">
+                <Mail className="w-5 h-5 text-yellow-600" />
+              </div>
+              <div>
+                <div className="text-sm text-slate-500 mb-1">البريد الإلكتروني</div>
+                <div className="text-lg font-semibold text-blue-600 hover:underline">{driver.email || 'غير متوفر'}</div>
+              </div>
+            </div>
 
-                <div className="flex items-start gap-3">
-                  <div className="bg-purple-100 p-2 rounded-lg">
-                    <MapPin className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-500 mb-1">رقم المركبة</div>
-                    <div className="text-base text-slate-800">{driver.vehicleNumber || 'غير متوفر'}</div>
-                  </div>
-                </div>
-                <div>
-                  <button
-                    onClick={handleStartChat}
-                    className="flex items-center gap-2 bg-green-400 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded-lg transition-colors"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    دردشة
-                  </button>
-                </div>
-              </>
-            )}
+            <div className="flex items-start gap-3">
+              <div className="bg-orange-100 p-2 rounded-lg">
+                <Truck className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <div className="text-sm text-slate-500 mb-1">نوع المركبة</div>
+                <div className="text-base text-slate-800">{driver.vehicleType || 'غير متوفر'}</div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <div className="bg-purple-100 p-2 rounded-lg">
+                <MapPin className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <div className="text-sm text-slate-500 mb-1">رقم المركبة</div>
+                <div className="text-base text-slate-800">{driver.vehicleNumber || 'غير متوفر'}</div>
+              </div>
+            </div>
+            <div>
+              <button
+                onClick={handleStartChat}
+                className="flex items-center gap-2 bg-green-400 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded-lg transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                دردشة
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Stats Card */}
-        <div className="bg-white flex-1 rounded-xl p-3 shadow-sm border border-slate-100">
+        <div className="bg-white flex-1 rounded-xl p-3 shadow-xs border border-slate-100">
           <h2 className="text-xl font-black text-green-800 mb-4">الإحصائيات</h2>
 
           <div className="space-y-4">
@@ -595,7 +581,7 @@ export default function DriverDetails() {
         </div>
 
         {/* Status Card */}
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 md:col-span-2">
+        <div className="bg-white rounded-xl p-4 shadow-xs border border-slate-100 md:col-span-2">
           <h2 className="text-xl font-black text-green-800 mb-4">الحالة</h2>
 
           <div className="flex gap-6">
@@ -641,44 +627,272 @@ export default function DriverDetails() {
           </div>
 
           {/* Add Credit Card */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 md:col-span-2">
-            <h2 className="text-xl font-black text-green-800 mb-4">إضافة رصيد للمندوب</h2>
+          <div className="bg-white rounded-xl p-4 shadow-xs border border-slate-100 md:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-black text-green-800">إضافة رصيد للمندوب</h2>
+              <button
+                onClick={() => setAddCreditModalOpen(true)}
+                className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <DollarSign className="w-4 h-4" />
+                إضافة رصيد
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">هذه الإضافة تُستخدم عند استلام المبلغ نقداً من المندوب مباشرة.</p>
+          </div>
 
-            <form onSubmit={handleAddCredit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">المبلغ (ج)</label>
-                <input
-                  type="number"
-                  value={creditAmount}
-                  onChange={(e) => setCreditAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  required
-                />
+          {/* Balance Transaction History */}
+          <div className="bg-white rounded-xl p-4 shadow-xs border border-slate-100 md:col-span-2">
+            <h2 className="text-xl font-black text-green-800 mb-4">سجل حركة الرصيد</h2>
+            {loadingTransactions ? (
+              <div className="text-center py-6 text-slate-500 text-sm">جاري التحميل...</div>
+            ) : transactions.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-sm">لا توجد عمليات على الرصيد بعد</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600">النوع</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600">المبلغ</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600">الرصيد بعد العملية</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600">ملاحظة</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600">التاريخ والوقت</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {transactions.map((t) => {
+                      const typeLabelMap: Record<string, string> = {
+                        recharge_bank: 'شحن بنكي',
+                        recharge_cash: 'شحن نقدي',
+                        commission_deduction: 'خصم عمولة',
+                        adjustment: 'تعديل'
+                      };
+                      const typeLabel = typeLabelMap[t.type];
+                      const isPositive = t.amount >= 0;
+                      return (
+                        <tr key={t._id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2">
+                            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${isPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {typeLabel}
+                            </span>
+                          </td>
+                          <td className={`px-3 py-2 font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPositive ? '+' : ''}{t.amount.toFixed(2)} جنيه
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">{t.balanceAfter.toFixed(2)} جنيه</td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {t.note}
+                            {t.performedBy?.name ? ` — بواسطة ${t.performedBy.name}` : ''}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                            {new Date(t.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">الوصف</label>
-                <input
-                  type="text"
-                  value={creditDescription}
-                  onChange={(e) => setCreditDescription(e.target.value)}
-                  placeholder="سبب الإضافة"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                />
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  disabled={addingCredit}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-3 rounded-xl transition-colors"
-                >
-                  {addingCredit ? 'جاري الإضافة...' : 'إضافة الرصيد'}
-                </button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
+
+        {/* Add Credit Modal */}
+        <Modal
+          isOpen={addCreditModalOpen}
+          onClose={() => {
+            setAddCreditModalOpen(false);
+            setCreditAmount('');
+            setCreditDescription('');
+          }}
+          title="إضافة رصيد للمندوب"
+          size="sm"
+        >
+          <form onSubmit={handleAddCredit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">المندوب</label>
+              <div className="text-sm text-slate-600">{driver?.name}</div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">المبلغ (ج)</label>
+              <input
+                type="number"
+                value={creditAmount}
+                onChange={(e) => setCreditAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">الوصف</label>
+              <input
+                type="text"
+                value={creditDescription}
+                onChange={(e) => setCreditDescription(e.target.value)}
+                placeholder="سبب الإضافة"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={addingCredit}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-2 rounded-xl transition-colors"
+            >
+              {addingCredit ? 'جاري الإضافة...' : 'إضافة الرصيد'}
+            </button>
+          </form>
+        </Modal>
+
+        {/* Edit Driver Modal */}
+        <Modal
+          isOpen={editDriverModalOpen}
+          onClose={() => {
+            setEditDriverModalOpen(false);
+            setIsEditing(false);
+          }}
+          title="تعديل بيانات المندوب"
+          size="md"
+        >
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleSaveEdit();
+          }} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">الهاتف</label>
+              <input
+                type="text"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">نوع المركبة</label>
+              <input
+                type="text"
+                value={editForm.vehicleType}
+                onChange={(e) => setEditForm({ ...editForm, vehicleType: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">رقم المركبة</label>
+              <input
+                type="text"
+                value={editForm.vehicleNumber}
+                onChange={(e) => setEditForm({ ...editForm, vehicleNumber: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+            >
+              حفظ التغييرات
+            </button>
+          </form>
+        </Modal>
+
+        {/* Edit Images Modal */}
+        <Modal
+          isOpen={editImagesModalOpen}
+          onClose={() => {
+            setEditImagesModalOpen(false);
+            setIsEditingImages(false);
+            handleCancelEditImages();
+          }}
+          title="تعديل صور المندوب"
+          size="lg"
+        >
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleImagesUpdate();
+          }} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">صورة الملف الشخصي</label>
+              <input
+                type="text"
+                value={profileImageUrl}
+                onChange={(e) => setProfileImageUrl(e.target.value)}
+                placeholder="رابط صورة الملف الشخصي"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">صورة المركبة</label>
+              <input
+                type="text"
+                value={vehicleImageUrl}
+                onChange={(e) => setVehicleImageUrl(e.target.value)}
+                placeholder="رابط صورة المركبة"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">صورة الرخصة</label>
+              <input
+                type="text"
+                value={licenseImageUrl}
+                onChange={(e) => setLicenseImageUrl(e.target.value)}
+                placeholder="رابط صورة الرخصة"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">صورة الهوية الوطنية</label>
+              <input
+                type="text"
+                value={nationalIdImageUrl}
+                onChange={(e) => setNationalIdImageUrl(e.target.value)}
+                placeholder="رابط صورة الهوية الوطنية"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">شهادة فحص المركبة</label>
+              <input
+                type="text"
+                value={inspectionCertificateImageUrl}
+                onChange={(e) => setInspectionCertificateImageUrl(e.target.value)}
+                placeholder="رابط شهادة فحص المركبة"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={updatingImages || (!profileImageUrl && !vehicleImageUrl && !licenseImageUrl && !nationalIdImageUrl && !inspectionCertificateImageUrl)}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-2 rounded-xl transition-colors"
+            >
+              {updatingImages ? 'جاري التحديث...' : 'تحديث الصور'}
+            </button>
+          </form>
+        </Modal>
       </div>
-    </DashboardLayout>
+    </DashboardLayout >
   );
 }

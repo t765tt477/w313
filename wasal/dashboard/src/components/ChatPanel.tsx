@@ -183,7 +183,7 @@ export default function ChatPanel({ initialConversationId }: ChatPanelProps) {
   const activeConversation = conversations.find((c) => c._id === activeId) || null;
 
   return (
-    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
+    <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
       <div className="flex h-full">
         {/* Conversation list */}
         <div className="w-80 border-l border-slate-100 flex flex-col shrink-0">

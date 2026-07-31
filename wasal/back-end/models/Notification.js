@@ -21,7 +21,9 @@ const notificationSchema = new mongoose.Schema({
       // Driver-facing dispatch events
       'order_offer', 'order_reassigned', 'order_offer_expired',
       // Client-facing order lifecycle events
-      'order_accepted', 'order_rejected', 'order_picked_up', 'order_delivered', 'order_no_driver'
+      'order_accepted', 'order_rejected', 'order_picked_up', 'order_delivered', 'order_no_driver',
+      // Wallet / balance events
+      'recharge_requested', 'recharge_approved', 'recharge_rejected', 'balance_credited', 'low_balance'
     ],
     required: true
   },

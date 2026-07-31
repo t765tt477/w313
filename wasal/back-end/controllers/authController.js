@@ -239,7 +239,11 @@ export const login = async (req, res) => {
     }
 
     if (user.isSuspended) {
-      return res.status(403).json({ message: 'Your account has been suspended' });
+      return res.status(403).json({
+        message: user.suspensionReason
+          ? `تم تعليق نشاطك من قبل الشركة. السبب: ${user.suspensionReason}`
+          : 'تم تعليق نشاطك من قبل الشركة، يرجى التواصل مع الإدارة.'
+      });
     }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -394,19 +398,34 @@ export const resendOTP = async (req, res) => {
 export const getMe = async (req, res) => {
   try {
     let user;
+    let role;
+
     user = await Admin.findById(req.user.id);
+    if (user) {
+      role = user.role || 'admin';
+    }
     if (!user) {
       user = await Driver.findById(req.user.id).populate('city', 'name');
+      if (user) {
+        role = user.role || 'driver';
+      }
     }
     if (!user) {
       user = await Client.findById(req.user.id).populate('city', 'name');
+      if (user) {
+        role = 'client';
+      }
     }
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.status(200).json({ user });
+    // Add role to user object
+    const userWithRole = user.toObject();
+    userWithRole.role = role;
+
+    res.status(200).json({ user: userWithRole });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { cityAPI } from '../services/api';
+import { cityAPI, pricingAPI } from '../services/api';
 import DashboardLayout from '../components/DashboardLayout';
-import { Save, ArrowRight, MapPin, Weight, DollarSign, Ruler } from 'lucide-react';
+import { Save, ArrowRight, MapPin, Weight, DollarSign, Ruler, Percent, AlertTriangle } from 'lucide-react';
 
 interface CityPricing {
   _id: string;
@@ -16,6 +16,8 @@ interface CityPricing {
   minDistance: number;
   maxDistance: number;
   baseDeliveryFee: number;
+  commissionPercentage: number;
+  minBalanceThreshold: number;
 }
 
 interface City {
@@ -38,26 +40,33 @@ export default function PricingSettings() {
 
   const fetchPricingSettings = async () => {
     try {
-      // For now, we'll create default settings for cities that don't have them
-      // In production, this would fetch from the API
-      const response = await cityAPI.getAllCities();
-      const citiesData = response.data.cities || [];
+      const [citiesResponse, pricingResponse] = await Promise.all([
+        cityAPI.getAllCities(),
+        pricingAPI.getAllPricingSettings()
+      ]);
+      const citiesData: City[] = citiesResponse.data.cities || [];
+      const existing = pricingResponse.data.pricingSettings || [];
 
-      const defaultSettings: CityPricing[] = citiesData.map((city: City) => ({
-        _id: city._id,
-        cityId: city._id,
-        cityName: city.name,
-        basePricePerKm: 2.00,
-        weightFeePerKg: 0.50,
-        sizeSmallFee: 0,
-        sizeMediumFee: 1,
-        sizeLargeFee: 2,
-        minDistance: 1,
-        maxDistance: 50,
-        baseDeliveryFee: 5
-      }));
+      const settings: CityPricing[] = citiesData.map((city) => {
+        const found = existing.find((p: any) => p.cityId?._id === city._id || p.cityId === city._id);
+        return {
+          _id: found?._id || city._id,
+          cityId: city._id,
+          cityName: city.name,
+          basePricePerKm: found?.basePricePerKm ?? 2.00,
+          weightFeePerKg: found?.weightFeePerKg ?? 0.50,
+          sizeSmallFee: found?.sizeSmallFee ?? 0,
+          sizeMediumFee: found?.sizeMediumFee ?? 1,
+          sizeLargeFee: found?.sizeLargeFee ?? 2,
+          minDistance: found?.minDistance ?? 1,
+          maxDistance: found?.maxDistance ?? 50,
+          baseDeliveryFee: found?.baseDeliveryFee ?? 5,
+          commissionPercentage: found?.commissionPercentage ?? 10,
+          minBalanceThreshold: found?.minBalanceThreshold ?? 50
+        };
+      });
 
-      setPricingSettings(defaultSettings);
+      setPricingSettings(settings);
 
       // Select the first city by default
       if (citiesData.length > 0) {
@@ -83,9 +92,21 @@ export default function PricingSettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // In production, this would save to the API
-      // For now, we'll simulate the save
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const currentSetting = pricingSettings.find(s => s.cityId === selectedCityId);
+      if (currentSetting) {
+        await pricingAPI.upsertPricingSettings(currentSetting.cityId, {
+          basePricePerKm: currentSetting.basePricePerKm,
+          weightFeePerKg: currentSetting.weightFeePerKg,
+          sizeSmallFee: currentSetting.sizeSmallFee,
+          sizeMediumFee: currentSetting.sizeMediumFee,
+          sizeLargeFee: currentSetting.sizeLargeFee,
+          minDistance: currentSetting.minDistance,
+          maxDistance: currentSetting.maxDistance,
+          baseDeliveryFee: currentSetting.baseDeliveryFee,
+          commissionPercentage: currentSetting.commissionPercentage,
+          minBalanceThreshold: currentSetting.minBalanceThreshold
+        });
+      }
       alert('تم حفظ إعدادات الأسعار بنجاح');
     } catch (error) {
       console.error('Error saving pricing settings:', error);
@@ -129,7 +150,7 @@ export default function PricingSettings() {
         </div>
 
         {/* City Selector */}
-        <div className="bg-white w-fit rounded-lg px-4 py-1 shadow-sm border border-slate-100">
+        <div className="bg-white w-fit rounded-lg px-4 py-1 shadow-xs border border-slate-100">
           <label className="block text-sm font-semibold text-slate-700 mb-2">اختر المدينة</label>
           <select
             value={selectedCityId}
@@ -150,7 +171,7 @@ export default function PricingSettings() {
           if (!currentSetting) return null;
 
           return (
-            <div className="bg-white rounded-lg p-5 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-lg p-5 shadow-xs border border-slate-100">
               {/* City Header */}
               <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
                 <div className="bg-green-100 p-3 rounded-lg">
@@ -285,6 +306,49 @@ export default function PricingSettings() {
                         step="0.01"
                         value={currentSetting.baseDeliveryFee}
                         onChange={(e) => handleUpdatePricing(currentSetting.cityId, 'baseDeliveryFee', e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      />
+                    </div>
+                    <span className="text-sm mt-6 text-slate-500">جنيه</span>
+                  </div>
+
+                  {/* Commission Percentage */}
+                  <div className="flex items-center gap-2 border-t border-slate-100 pt-3 mt-1">
+                    <div className="bg-red-100 p-2 rounded-lg mt-6">
+                      <Percent className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        نسبة عمولة الشركة (تُخصم من رصيد المندوب بعد كل توصيلة)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        max={100}
+                        value={currentSetting.commissionPercentage}
+                        onChange={(e) => handleUpdatePricing(currentSetting.cityId, 'commissionPercentage', e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      />
+                    </div>
+                    <span className="text-sm mt-6 text-slate-500">%</span>
+                  </div>
+
+                  {/* Minimum Balance Threshold */}
+                  <div className="flex items-center gap-2">
+                    <div className="bg-orange-100 p-2 rounded-lg mt-6">
+                      <AlertTriangle className="w-4 h-4 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        الحد الأدنى للرصيد قبل تنبيه المندوب بالشحن
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        min={0}
+                        value={currentSetting.minBalanceThreshold}
+                        onChange={(e) => handleUpdatePricing(currentSetting.cityId, 'minBalanceThreshold', e.target.value)}
                         className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                       />
                     </div>

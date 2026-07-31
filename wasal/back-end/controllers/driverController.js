@@ -1,7 +1,15 @@
 import Driver from '../models/Driver.js';
 import Order from '../models/Order.js';
+import PricingSettings from '../models/PricingSettings.js';
+import BalanceTransaction from '../models/BalanceTransaction.js';
+import RechargeRequest from '../models/RechargeRequest.js';
 import dispatchService from '../services/dispatchService.js';
 import { emitToUser } from '../services/socketService.js';
+import { broadcastToAdmins, createNotification } from './notificationController.js';
+
+// Default commission percentage used when a city has no pricing settings yet
+const DEFAULT_COMMISSION_PERCENTAGE = 10;
+const DEFAULT_MIN_BALANCE_THRESHOLD = 50;
 
 // Update driver profile
 export const updateDriverProfile = async (req, res) => {
@@ -167,11 +175,48 @@ export const updateOrderStatus = async (req, res) => {
       order.deliveredAt = new Date();
       order.paymentStatus = 'paid';
 
-      // Update driver stats
+      // Update driver stats. The driver collects the trip price directly
+      // from the client (cash), so we only track it as earnings here...
       driver.totalDeliveries += 1;
       driver.totalEarnings += order.driverEarnings;
-      driver.balance += order.driverEarnings;
+
+      // ...and deduct the company's commission on the trip from the
+      // driver's prepaid wallet balance, using the commission percentage
+      // configured for the driver's city.
+      const pricing = await PricingSettings.findOne({ cityId: driver.city });
+      const commissionPercentage = pricing?.commissionPercentage ?? DEFAULT_COMMISSION_PERCENTAGE;
+      const minBalanceThreshold = pricing?.minBalanceThreshold ?? DEFAULT_MIN_BALANCE_THRESHOLD;
+      const commissionAmount = Number((order.price * (commissionPercentage / 100)).toFixed(2));
+
+      const balanceBefore = driver.balance;
+      driver.balance -= commissionAmount;
       await driver.save();
+
+      await BalanceTransaction.create({
+        driver: driver._id,
+        type: 'commission_deduction',
+        amount: -commissionAmount,
+        balanceBefore,
+        balanceAfter: driver.balance,
+        order: order._id,
+        note: `عمولة الشركة (${commissionPercentage}%) عن الطلب ${order.orderNumber}`
+      });
+
+      // Notify the driver their balance changed, and warn them if it's now
+      // below the minimum threshold so they know to recharge.
+      emitToUser(driver._id, 'balance:updated', { balance: driver.balance });
+      if (driver.balance < minBalanceThreshold) {
+        const lowBalanceNotification = await createNotification(
+          driver._id,
+          'low_balance',
+          'رصيدك غير كافٍ',
+          `رصيدك الحالي ${driver.balance.toFixed(2)} جنيه غير كافٍ لاستقبال طلبات جديدة، يرجى شحن الرصيد.`,
+          { driverId: driver._id, amount: driver.balance },
+          'Driver',
+          true
+        );
+        emitToUser(driver._id, 'balance:low', lowBalanceNotification);
+      }
     }
 
     await order.save();
@@ -258,6 +303,85 @@ export const getEarnings = async (req, res) => {
     }));
 
     res.status(200).json({ earnings });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Driver submits a bank-transfer recharge request (بنكك): last 6 digits of
+// the operation number + the amount sent in SDG. This only applies when the
+// money was sent via bank transfer; cash top-ups are entered by an admin
+// directly on the driver's page.
+export const requestRecharge = async (req, res) => {
+  try {
+    const { transactionLast6, amountSent } = req.body;
+
+    if (!transactionLast6 || String(transactionLast6).trim().length !== 6) {
+      return res.status(400).json({ message: 'يرجى إدخال آخر 6 أرقام من عملية التحويل بشكل صحيح' });
+    }
+    if (!amountSent || Number(amountSent) <= 0) {
+      return res.status(400).json({ message: 'يرجى إدخال قيمة المبلغ المرسل' });
+    }
+
+    const driver = await Driver.findById(req.user.id);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Check if transactionLast6 already exists in database
+    const existingTransaction = await RechargeRequest.findOne({
+      transactionLast6: String(transactionLast6).trim()
+    });
+
+    if (existingTransaction) {
+      return res.status(400).json({
+        message: 'رقم العملية مسجل مسبقاً في النظام، لا يمكن استخدام نفس الرقم أكثر من مرة'
+      });
+    }
+
+    const rechargeRequest = await RechargeRequest.create({
+      driver: driver._id,
+      method: 'bank',
+      transactionLast6: String(transactionLast6).trim(),
+      amountSent: Number(amountSent)
+    });
+
+    // Notify every connected admin/employee, with sound, that this driver
+    // requested a balance recharge.
+    broadcastToAdmins(
+      'recharge_requested',
+      'طلب شحن رصيد',
+      `المندوب ${driver.name} طلب شحن رصيد بقيمة ${Number(amountSent).toFixed(2)} جنيه`,
+      { driverId: driver._id, amount: Number(amountSent) },
+      true
+    );
+
+    res.status(201).json({ message: 'تم إرسال طلب الشحن، سيتم مراجعته قريبًا', rechargeRequest });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Driver's own recharge request history
+export const getMyRechargeRequests = async (req, res) => {
+  try {
+    const rechargeRequests = await RechargeRequest.find({ driver: req.user.id })
+      .sort({ createdAt: -1 });
+    res.status(200).json({ rechargeRequests });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Driver's own balance transaction history (recharges + commission deductions),
+// each with a clear timestamp.
+export const getMyBalanceTransactions = async (req, res) => {
+  try {
+    const transactions = await BalanceTransaction.find({ driver: req.user.id })
+      .populate('order', 'orderNumber')
+      .sort({ createdAt: -1 })
+      .limit(200);
+    res.status(200).json({ transactions });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -46,6 +46,16 @@ function FitBounds({ points }: { points: [number, number][] }) {
 }
 
 export default function RouteMap({ pickup, delivery, driverPosition, height = '320px' }: RouteMapProps) {
+  if (!pickup?.lat || !pickup?.lng || !delivery?.lat || !delivery?.lng) {
+    return (
+      <div style={{ height, width: '100%', borderRadius: 16, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9' }}>
+        <div style={{ textAlign: 'center', color: '#64748b' }}>
+          <div style={{ fontSize: '14px' }}>بيانات الموقع غير متوفرة</div>
+        </div>
+      </div>
+    );
+  }
+
   const points: [number, number][] = [
     [pickup.lat, pickup.lng],
     [delivery.lat, delivery.lng],

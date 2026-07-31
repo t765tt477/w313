@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import ClientDetails from './pages/ClientDetails';
 import DriverDetails from './pages/DriverDetails';
 import PricingSettings from './pages/PricingSettings';
+import RechargeRequests from './pages/RechargeRequests';
 import RouteTracker from './components/RouteTracker';
 
 function AppContent() {
@@ -36,6 +37,7 @@ function AppContent() {
         <Route path="/client/:id" element={isAuthenticated ? <ClientDetails /> : <Navigate to="/login" />} />
         <Route path="/driver/:id" element={isAuthenticated ? <DriverDetails /> : <Navigate to="/login" />} />
         <Route path="/pricing-settings" element={isAuthenticated ? <PricingSettings /> : <Navigate to="/login" />} />
+        <Route path="/recharge-requests" element={isAuthenticated ? <RechargeRequests /> : <Navigate to="/login" />} />
         <Route path="/" element={<Navigate to={isAuthenticated ? (localStorage.getItem('lastRoute') || '/dashboard') : '/login'} />} />
       </Routes>
     </>

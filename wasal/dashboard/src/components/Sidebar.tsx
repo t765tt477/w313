@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Settings, LogOut, BarChart3, Users as Clients, Shield, FileText, MapPin, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Settings, LogOut, BarChart3, Users as Clients, Shield, FileText, MapPin, MessageCircle, Wallet } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -24,6 +24,7 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
     { id: 'overview' as const, label: 'نظرة عامة', icon: LayoutDashboard },
     { id: 'drivers' as const, label: 'المندوبين', icon: Users },
     { id: 'orders' as const, label: 'الطلبات', icon: Package },
+    { id: 'recharge-requests' as const, label: 'طلبات الشحن', icon: Wallet },
     { id: 'chat' as const, label: 'الدردشة', icon: MessageCircle },
     { id: 'users' as const, label: 'الزباين', icon: Clients },
     { id: 'analytics' as const, label: 'التحليلات', icon: BarChart3 },
@@ -34,6 +35,13 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
   ];
 
   const handleMenuClick = (itemId: string) => {
+    if (itemId === 'recharge-requests') {
+      navigate('/recharge-requests');
+      if (window.innerWidth < 1024) {
+        onToggle();
+      }
+      return;
+    }
     onTabChange(itemId as any);
     navigate('/dashboard');
     if (window.innerWidth < 1024) {
@@ -54,7 +62,7 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
       {/* Sidebar */}
       <aside
         className="static top-0 right-0 h-full bg-white border-l border-slate-200 z-50"
-        style={{ width: '160px' }}
+        style={{ width: '165px' }}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
@@ -68,7 +76,7 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-4 space-y-2">
+          <nav className="flex-1 px-2 py-4 space-y-2 overflow-y-auto">
             {menuItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -76,7 +84,7 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
                   key={item.id}
                   onClick={() => handleMenuClick(item.id)}
                   className={`w-full flex items-center gap-1.5 px-3 py-2 rounded-sm text-sm font-bold transition-all ${activeTab === item.id
-                    ? 'bg-green-400 text-white shadow-sm'
+                    ? 'bg-green-400 text-white shadow-xs'
                     : 'text-yellow-600 hover:bg-green-50 hover:text-green-700'
                     }`}
                 >

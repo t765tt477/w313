@@ -34,7 +34,9 @@ export const getPricingByCity = async (req, res) => {
         sizeLargeFee: 2,
         minDistance: 1,
         maxDistance: 50,
-        baseDeliveryFee: 5
+        baseDeliveryFee: 5,
+        commissionPercentage: 10,
+        minBalanceThreshold: 50
       });
       await pricing.save();
     }
@@ -57,7 +59,9 @@ export const upsertPricingSettings = async (req, res) => {
       sizeLargeFee,
       minDistance,
       maxDistance,
-      baseDeliveryFee
+      baseDeliveryFee,
+      commissionPercentage,
+      minBalanceThreshold
     } = req.body;
 
     const city = await City.findById(cityId);
@@ -77,7 +81,9 @@ export const upsertPricingSettings = async (req, res) => {
         sizeLargeFee,
         minDistance,
         maxDistance,
-        baseDeliveryFee
+        baseDeliveryFee,
+        commissionPercentage,
+        minBalanceThreshold
       },
       { upsert: true, new: true, runValidators: true }
     );

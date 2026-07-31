@@ -66,6 +66,7 @@ import notificationRoutes from './routes/notifications.js';
 import logRoutes from './routes/logs.js';
 import cityRoutes from './routes/cities.js';
 import chatRoutes from './routes/chat.js';
+import pricingRoutes from './routes/pricing.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -76,6 +77,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/cities', cityRoutes);
 app.use('/api/chats', chatRoutes);
+app.use('/api/pricing', pricingRoutes);
 
 // Root route
 app.get('/', (req, res) => {

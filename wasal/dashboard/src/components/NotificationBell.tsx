@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Check, Trash2, Package, Car, DollarSign, Clipboard, RefreshCw, Timer, AlertTriangle, CheckCircle, ArrowLeft, Flag } from 'lucide-react';
 import { notificationAPI } from '../services/api';
 import { getSocket } from '../services/socket';
@@ -22,8 +23,12 @@ interface Notification {
 }
 
 export default function NotificationBell() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [creditRequestsCount, setCreditRequestsCount] = useState(0);
+  const [chatMessagesCount, setChatMessagesCount] = useState(0);
+  const [newAgentsCount, setNewAgentsCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [justArrived, setJustArrived] = useState(false); // drives the bell "shake" animation
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -88,6 +93,14 @@ export default function NotificationBell() {
       const response = await notificationAPI.getNotifications();
       setNotifications(response.data.notifications);
       setUnreadCount(response.data.unreadCount);
+
+      // Count specific notification types
+      const unreadNotifications = response.data.notifications.filter((n: Notification) => !n.isRead);
+      setCreditRequestsCount(unreadNotifications.filter((n: Notification) =>
+        n.type === 'recharge_requested' || n.type === 'balance_credited' || n.type === 'low_balance'
+      ).length);
+      setChatMessagesCount(unreadNotifications.filter((n: Notification) => n.type === 'chat_message').length);
+      setNewAgentsCount(unreadNotifications.filter((n: Notification) => n.type === 'driver_approval').length);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     }
@@ -134,6 +147,53 @@ export default function NotificationBell() {
     }
   };
 
+  const handleNotificationClick = (notification: Notification) => {
+    // Mark as read when clicked
+    if (!notification.isRead) {
+      handleMarkAsRead(notification._id);
+    }
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case 'recharge_requested':
+      case 'balance_credited':
+      case 'low_balance':
+        navigate('/recharge-requests');
+        break;
+      case 'chat_message':
+        navigate('/dashboard', { state: { openChat: true, conversationId: notification.data?.conversationId } });
+        break;
+      case 'driver_approval':
+        if (notification.data?.driverId) {
+          navigate(`/driver/${notification.data.driverId}`);
+        } else {
+          navigate('/dashboard', { state: { activeTab: 'drivers' } });
+        }
+        break;
+      case 'new_order':
+      case 'order_update':
+      case 'order_accepted':
+      case 'order_rejected':
+      case 'order_picked_up':
+      case 'order_delivered':
+      case 'order_offer':
+      case 'order_reassigned':
+      case 'order_offer_expired':
+      case 'order_no_driver':
+        if (notification.data?.orderId) {
+          navigate('/dashboard', { state: { activeTab: 'orders', orderId: notification.data.orderId } });
+        } else {
+          navigate('/dashboard', { state: { activeTab: 'orders' } });
+        }
+        break;
+      default:
+        // For other notification types, just close the dropdown
+        break;
+    }
+
+    setIsOpen(false);
+  };
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -174,6 +234,13 @@ export default function NotificationBell() {
         return Package;
       case 'order_delivered':
         return Flag;
+      case 'recharge_requested':
+      case 'balance_credited':
+        return DollarSign;
+      case 'low_balance':
+        return AlertTriangle;
+      case 'chat_message':
+        return MessageCircle;
       default:
         return Bell;
     }
@@ -209,6 +276,42 @@ export default function NotificationBell() {
             )}
           </div>
 
+          {/* Notification Types Summary */}
+          {unreadCount > 0 && (
+            <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50">
+              <button
+                onClick={() => {
+                  navigate('/recharge-requests');
+                  setIsOpen(false);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${creditRequestsCount > 0 ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-400'}`}
+              >
+                <DollarSign className="w-4 h-4" />
+                طلبات الرصيد ({creditRequestsCount})
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/dashboard', { state: { openChat: true } });
+                  setIsOpen(false);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${chatMessagesCount > 0 ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-400'}`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                الدردشة ({chatMessagesCount})
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/dashboard', { state: { activeTab: 'drivers' } });
+                  setIsOpen(false);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${newAgentsCount > 0 ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-slate-100 text-slate-400'}`}
+              >
+                <Car className="w-4 h-4" />
+                المندوبين ({newAgentsCount})
+              </button>
+            </div>
+          )}
+
           {/* Notifications List */}
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
@@ -220,7 +323,8 @@ export default function NotificationBell() {
               notifications.map((notification) => (
                 <div
                   key={notification._id}
-                  className={`p-4 border-b border-slate-100 hover:bg-slate-50 transition-colors ${!notification.isRead ? 'bg-green-50/50' : ''
+                  onClick={() => handleNotificationClick(notification)}
+                  className={`p-4 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer ${!notification.isRead ? 'bg-green-50/50' : ''
                     }`}
                 >
                   <div className="flex items-start gap-3">

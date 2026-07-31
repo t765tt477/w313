@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { adminAPI, logAPI } from '../services/api';
 import CitiesManager from '../components/CitiesManager';
 import ChatPanel from '../components/ChatPanel';
 import Sidebar from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
-import { Search, RefreshCw, Settings, DollarSign, Lock, Share2 } from 'lucide-react';
+import Modal from '../components/Modal';
+import { Search, RefreshCw, Settings, DollarSign, Lock, Share2, Plus, Edit2, Trash2, MessageCircle } from 'lucide-react';
 
 interface Analytics {
   totalUsers: number;
@@ -38,8 +39,8 @@ interface Order {
   orderNumber: string;
   client: { name: string; phone: string };
   driver?: { name: string; phone: string };
-  pickupAddress: string;
-  deliveryAddress: string;
+  pickupLocation?: { address: string };
+  deliveryLocation?: { address: string };
   price: number;
   status: 'pending' | 'accepted' | 'picked_up' | 'delivered' | 'cancelled';
   createdAt: string;
@@ -85,6 +86,12 @@ export default function Dashboard() {
   const [adminRole, setAdminRole] = useState<'admin' | 'super_admin'>('admin');
   const [adminLoading, setAdminLoading] = useState(false);
   const [admins, setAdmins] = useState<any[]>([]);
+  const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
+  const [editAdminForm, setEditAdminForm] = useState({ name: '', email: '', phone: '' });
+  const [savingAdminEdit, setSavingAdminEdit] = useState(false);
+  const [suspendingAdminId, setSuspendingAdminId] = useState<string | null>(null);
+  const [suspendReason, setSuspendReason] = useState('');
+  const [suspendActionLoading, setSuspendActionLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [logSearchQuery, setLogSearchQuery] = useState('');
@@ -92,6 +99,12 @@ export default function Dashboard() {
   const [logFilterAction, setLogFilterAction] = useState<'all' | 'create' | 'update' | 'delete' | 'login' | 'logout'>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [initialConversationId, setInitialConversationId] = useState<string | null>(null);
+
+  // Modal states
+  const [createAdminModalOpen, setCreateAdminModalOpen] = useState(false);
+  const [editAdminModalOpen, setEditAdminModalOpen] = useState(false);
+  const [addCreditModalOpen, setAddCreditModalOpen] = useState(false);
+  const [passwordChangeModalOpen, setPasswordChangeModalOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -270,6 +283,53 @@ export default function Dashboard() {
     }
   };
 
+  const openEditAdmin = (admin: any) => {
+    setEditingAdminId(admin._id);
+    setEditAdminForm({ name: admin.name || '', email: admin.email || '', phone: admin.phone || '' });
+    setSuspendingAdminId(null);
+    setEditAdminModalOpen(true);
+  };
+
+  const handleSaveAdminEdit = async (adminId: string) => {
+    setSavingAdminEdit(true);
+    try {
+      await adminAPI.updateAdmin(adminId, editAdminForm);
+      alert('تم تحديث بيانات الموظف بنجاح');
+      setEditingAdminId(null);
+      fetchAdmins();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'فشل تحديث بيانات الموظف');
+    } finally {
+      setSavingAdminEdit(false);
+    }
+  };
+
+  const openSuspendAdmin = (admin: any) => {
+    setSuspendingAdminId(admin._id);
+    setSuspendReason('');
+    setEditingAdminId(null);
+  };
+
+  const handleToggleSuspendAdmin = async (admin: any) => {
+    // Re-activating doesn't need a reason; suspending does.
+    if (!admin.isSuspended && !suspendReason.trim()) {
+      alert('يرجى كتابة ملاحظة توضح سبب تعليق نشاط الموظف');
+      return;
+    }
+    setSuspendActionLoading(true);
+    try {
+      await adminAPI.toggleAdminSuspension(admin._id, admin.isSuspended ? undefined : suspendReason.trim());
+      alert(admin.isSuspended ? 'تم إلغاء تعليق الموظف' : 'تم تعليق نشاط الموظف');
+      setSuspendingAdminId(null);
+      setSuspendReason('');
+      fetchAdmins();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'فشلت العملية');
+    } finally {
+      setSuspendActionLoading(false);
+    }
+  };
+
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
       log.action?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
@@ -312,8 +372,8 @@ export default function Dashboard() {
       order.client?.name?.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
       order.client?.phone?.includes(orderSearchQuery) ||
       order.driver?.name?.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-      order.pickupAddress?.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-      order.deliveryAddress?.toLowerCase().includes(orderSearchQuery.toLowerCase());
+      order.pickupLocation?.address?.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
+      order.deliveryLocation?.address?.toLowerCase().includes(orderSearchQuery.toLowerCase());
 
     const matchesStatus =
       orderFilterStatus === 'all' || order.status === orderFilterStatus;
@@ -396,35 +456,35 @@ export default function Dashboard() {
               {/* Stats Cards */}
               <h1 className="text-2xl font-black text-green-800 mb-4">الإحصائيات</h1>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.totalUsers}</div>
                   <div className="text-slate-500 text-sm mt-1">إجمالي الزباين</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.totalDrivers}</div>
                   <div className="text-slate-500 text-sm mt-1">إجمالي المندوبين</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.activeDrivers}</div>
                   <div className="text-slate-500 text-sm mt-1">مندوب نشط</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.totalOrders}</div>
                   <div className="text-slate-500 text-sm mt-1">إجمالي الطلبات</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.completedOrders}</div>
                   <div className="text-slate-500 text-sm mt-1">طلبات مكتملة</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-2xl font-black text-green-600">{analytics.pendingOrders}</div>
                   <div className="text-slate-500 text-sm mt-1">طلبات معلقة</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-xl font-black text-green-600">{analytics.totalRevenue.toFixed(2)} ج</div>
                   <div className="text-slate-500 text-sm mt-1">إجمالي الإيرادات</div>
                 </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
                   <div className="text-xl font-black text-green-600">{analytics.driverEarnings.toFixed(2)} ج</div>
                   <div className="text-slate-500 text-sm mt-1">أرباح المندوبين</div>
                 </div>
@@ -435,7 +495,7 @@ export default function Dashboard() {
           {activeTab === 'drivers' && (
             <div className="space-y-6">
               {/* Drivers List */}
-              <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة المندوبين</h3>
 
@@ -557,7 +617,7 @@ export default function Dashboard() {
 
           {activeTab === 'orders' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة الطلبات</h3>
 
@@ -621,15 +681,15 @@ export default function Dashboard() {
                             <td className="px-4 py-2 text-sm text-slate-600">
                               {order.driver ? (
                                 <div>
-                                  <div className="text-green-600">{order.driver.name}</div>
-                                  <div className="text-xs text-yellow-600">{order.driver.phone}</div>
+                                  <div className="text-green-600">{order.driver.name || 'غير معروف'}</div>
+                                  <div className="text-xs text-yellow-600">{order.driver.phone || 'غير متوفر'}</div>
                                 </div>
                               ) : (
                                 <span className="text-slate-400">غير محدد</span>
                               )}
                             </td>
-                            <td className="px-4 py-2 text-sm text-slate-600 max-w-xs truncate">{order.pickupAddress || 'غير متوفر'}</td>
-                            <td className="px-4 py-2 text-sm text-slate-600 max-w-xs truncate">{order.deliveryAddress || 'غير متوفر'}</td>
+                            <td className="px-4 py-2 text-sm text-slate-600 max-w-xs truncate">{order.pickupLocation?.address || 'غير متوفر'}</td>
+                            <td className="px-4 py-2 text-sm text-slate-600 max-w-xs truncate">{order.deliveryLocation?.address || 'غير متوفر'}</td>
                             <td className="px-4 py-2 text-sm font-semibold text-green-600">{order.price?.toFixed(2) || '0.00'} جنيه</td>
                             <td className="px-4 py-2">
                               {order.status === 'pending' && <span className="bg-yellow-100 text-yellow-700 text-xs font-semibold px-3 py-1 rounded-full">قيد الانتظار</span>}
@@ -656,7 +716,7 @@ export default function Dashboard() {
 
           {activeTab === 'users' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة الزباين</h3>
 
@@ -739,7 +799,7 @@ export default function Dashboard() {
 
           {activeTab === 'analytics' && analytics && (
             <div className="space-y-6">
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+              <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-100">
                 <h3 className="text-lg font-black text-green-700 mb-6">ملخص الأداء</h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -819,66 +879,18 @@ export default function Dashboard() {
 
           {activeTab === 'admin-management' && isSuperAdmin && (
             <div className="space-y-4">
-              <div className="bg-white rounded-lg p-5 shadow-sm border border-slate-100">
-                <h3 className="text-lg font-black text-green-800 mb-4">إنشاء موظف جديد</h3>
-                <form onSubmit={handleCreateAdmin} className="grid md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
-                    <input
-                      type="text"
-                      value={adminName}
-                      onChange={(e) => setAdminName(e.target.value)}
-                      placeholder="اسم الموظف"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
-                    <input
-                      type="email"
-                      value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
-                      placeholder="admin@example.com"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور</label>
-                    <input
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">الدور</label>
-                    <select
-                      value={adminRole}
-                      onChange={(e) => setAdminRole(e.target.value as any)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                    >
-                      <option value="admin">موظف</option>
-                      <option value="super_admin">سوبر ادمن</option>
-                    </select>
-                  </div>
-                  <div className="md:col-span-4">
-                    <button
-                      type="submit"
-                      disabled={adminLoading}
-                      className="text-sm bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {adminLoading ? 'جاري الإنشاء...' : 'إنشاء الموظف'}
-                    </button>
-                  </div>
-                </form>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-black text-green-800">قائمة الموظفين</h3>
+                <button
+                  onClick={() => setCreateAdminModalOpen(true)}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  إضافة موظف
+                </button>
               </div>
 
-              <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة الموظفين</h3>
                 </div>
@@ -888,7 +900,9 @@ export default function Dashboard() {
                       <tr>
                         <th className="px-4 py-3 text-right text-sm font-bold text-white">الاسم</th>
                         <th className="px-4 py-3 text-right text-sm font-bold text-white">البريد الإلكتروني</th>
+                        <th className="px-4 py-3 text-right text-sm font-bold text-white">الهاتف</th>
                         <th className="px-4 py-3 text-right text-sm font-bold text-white">الدور</th>
+                        <th className="px-4 py-3 text-right text-sm font-bold text-white">الحالة</th>
                         <th className="px-4 py-3 text-right text-sm font-bold text-white">تاريخ الإنشاء</th>
                         <th className="px-4 py-3 text-right text-sm font-bold text-white">إجراءات</th>
                       </tr>
@@ -896,34 +910,110 @@ export default function Dashboard() {
                     <tbody className="divide-y divide-slate-100">
                       {admins.length > 0 ? (
                         admins.map((admin) => (
-                          <tr key={admin._id} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 text-sm font-medium text-slate-800">{admin.name}</td>
-                            <td className="px-4 py-3 text-sm text-slate-600">{admin.email}</td>
-                            <td className="px-4 py-3">
-                              {admin.role === 'super_admin' ? (
-                                <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-3 py-1 rounded-full">سوبر ادمن</span>
-                              ) : (
-                                <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">موظف</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-slate-600">
-                              {new Date(admin.createdAt).toLocaleDateString('ar-EG')}
-                            </td>
-                            <td className="px-4 py-3">
-                              {admin.role !== 'super_admin' && (
-                                <button
-                                  onClick={() => handleDeleteAdmin(admin._id)}
-                                  className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                                >
-                                  حذف
-                                </button>
-                              )}
-                            </td>
-                          </tr>
+                          <Fragment key={admin._id}>
+                            <tr className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-sm font-medium text-slate-800">{admin.name}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{admin.email}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{admin.phone || 'غير متوفر'}</td>
+                              <td className="px-4 py-3">
+                                {admin.role === 'super_admin' ? (
+                                  <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-3 py-1 rounded-full">سوبر ادمن</span>
+                                ) : (
+                                  <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">موظف</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {admin.isSuspended ? (
+                                  <span className="bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full" title={admin.suspensionReason || ''}>
+                                    موقوف
+                                  </span>
+                                ) : (
+                                  <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">نشط</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {new Date(admin.createdAt).toLocaleDateString('ar-EG')}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => openEditAdmin(admin)}
+                                    className="bg-yellow-500 hover:bg-yellow-600 text-white p-2 rounded-lg transition-colors"
+                                    title="تعديل"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  {admin.role !== 'super_admin' && (
+                                    <>
+                                      {admin.isSuspended ? (
+                                        <button
+                                          onClick={() => handleToggleSuspendAdmin(admin)}
+                                          disabled={suspendActionLoading}
+                                          className="bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white p-2 rounded-lg transition-colors"
+                                          title="إلغاء التعليق"
+                                        >
+                                          <RefreshCw className="w-4 h-4" />
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => openSuspendAdmin(admin)}
+                                          className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition-colors"
+                                          title="تعليق النشاط"
+                                        >
+                                          <Lock className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => handleDeleteAdmin(admin._id)}
+                                        className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-colors"
+                                        title="حذف"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+
+                            {suspendingAdminId === admin._id && (
+                              <tr className="bg-orange-50/50">
+                                <td colSpan={7} className="px-4 py-4">
+                                  <div className="flex flex-wrap items-end gap-3">
+                                    <div className="flex-1 min-w-[240px]">
+                                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                        ملاحظة عن سبب تعليق نشاط الموظف
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={suspendReason}
+                                        onChange={(e) => setSuspendReason(e.target.value)}
+                                        placeholder="اكتب سبب التعليق..."
+                                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                      />
+                                    </div>
+                                    <button
+                                      onClick={() => handleToggleSuspendAdmin(admin)}
+                                      disabled={suspendActionLoading}
+                                      className="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 text-white text-sm font-bold px-4 py-2 rounded-lg"
+                                    >
+                                      {suspendActionLoading ? 'جاري التنفيذ...' : 'تأكيد التعليق'}
+                                    </button>
+                                    <button
+                                      onClick={() => setSuspendingAdminId(null)}
+                                      className="text-slate-500 text-sm px-3 py-2"
+                                    >
+                                      إلغاء
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                          <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
                             لا يوجد موظفين
                           </td>
                         </tr>
@@ -937,7 +1027,7 @@ export default function Dashboard() {
 
           {activeTab === 'logs' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-sm shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">سجلات النظام</h3>
 
@@ -1054,7 +1144,7 @@ export default function Dashboard() {
                   {/* Pricing Settings */}
                   <div
                     onClick={() => navigate('/pricing-settings')}
-                    className="bg-white rounded-lg p-6 shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
+                    className="bg-white rounded-lg p-6 shadow-xs border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
                   >
                     <div className="flex items-center gap-4 mb-4">
                       <div className="bg-yellow-100 p-3 rounded-xl group-hover:bg-yellow-200 transition-colors">
@@ -1067,7 +1157,7 @@ export default function Dashboard() {
 
                   {/* Social Media Settings */}
                   <div
-                    className="bg-white rounded-lg p-6 shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
+                    className="bg-white rounded-lg p-6 shadow-xs border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
                   >
                     <div className="flex items-center gap-4 mb-4">
                       <div className="bg-blue-100 p-3 rounded-xl group-hover:bg-blue-200 transition-colors">
@@ -1078,57 +1168,238 @@ export default function Dashboard() {
                     <p className="text-sm text-slate-500">إدارة روابط التواصل الاجتماعي</p>
                   </div>
                 </div>
-                {/* Password Change Form */}
-                <div className="bg-white max-w-md flex-1 rounded-lg px-5 py-4 shadow-sm border border-slate-100">
-                  <h3 className="text-lg font-black text-green-800 mb-4">تغيير كلمة المرور</h3>
-                  <form onSubmit={handlePasswordChange} className="space-y-2">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور الحالية</label>
-                      <input
-                        type="password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="أدخل كلمة المرور الحالية"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                        required
-                      />
+                {/* Password Change */}
+                <div
+                  onClick={() => setPasswordChangeModalOpen(true)}
+                  className="bg-white max-w-md flex-1 rounded-lg px-5 py-4 shadow-xs border border-slate-100 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
+                >
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="bg-purple-100 p-3 rounded-xl group-hover:bg-purple-200 transition-colors">
+                      <Lock className="w-6 h-6 text-purple-600" />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور الجديدة</label>
-                      <input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="أدخل كلمة المرور الجديدة"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">تأكيد كلمة المرور الجديدة</label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="أعد إدخال كلمة المرور الجديدة"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                        required
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={settingsLoading}
-                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold py-2 rounded-xl transition-colors"
-                    >
-                      {settingsLoading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
-                    </button>
-                  </form>
+                    <h3 className="text-lg font-black text-green-800">تغيير كلمة المرور</h3>
+                  </div>
+                  <p className="text-sm text-slate-500">تحديث كلمة المرور الخاصة بحسابك</p>
                 </div>
               </section>
             </div>
           )}
         </div>
       </div>
+
+      {/* Create Admin Modal */}
+      <Modal
+        isOpen={createAdminModalOpen}
+        onClose={() => setCreateAdminModalOpen(false)}
+        title="إنشاء موظف جديد"
+        size="md"
+      >
+        <form onSubmit={handleCreateAdmin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
+            <input
+              type="text"
+              value={adminName}
+              onChange={(e) => setAdminName(e.target.value)}
+              placeholder="اسم الموظف"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
+            <input
+              type="email"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              placeholder="admin@example.com"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور</label>
+            <input
+              type="password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">الدور</label>
+            <select
+              value={adminRole}
+              onChange={(e) => setAdminRole(e.target.value as any)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            >
+              <option value="admin">موظف</option>
+              <option value="super_admin">سوبر ادمن</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={adminLoading}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold py-2 rounded-xl transition-colors"
+          >
+            {adminLoading ? 'جاري الإنشاء...' : 'إنشاء الموظف'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Edit Admin Modal */}
+      <Modal
+        isOpen={editAdminModalOpen}
+        onClose={() => {
+          setEditAdminModalOpen(false);
+          setEditingAdminId(null);
+        }}
+        title="تعديل بيانات الموظف"
+        size="md"
+      >
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          if (editingAdminId) handleSaveAdminEdit(editingAdminId);
+        }} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">الاسم</label>
+            <input
+              type="text"
+              value={editAdminForm.name}
+              onChange={(e) => setEditAdminForm({ ...editAdminForm, name: e.target.value })}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">البريد الإلكتروني</label>
+            <input
+              type="email"
+              value={editAdminForm.email}
+              onChange={(e) => setEditAdminForm({ ...editAdminForm, email: e.target.value })}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">الهاتف</label>
+            <input
+              type="text"
+              value={editAdminForm.phone}
+              onChange={(e) => setEditAdminForm({ ...editAdminForm, phone: e.target.value })}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={savingAdminEdit}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-2 rounded-xl transition-colors"
+          >
+            {savingAdminEdit ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Add Credit Modal */}
+      <Modal
+        isOpen={addCreditModalOpen}
+        onClose={() => {
+          setAddCreditModalOpen(false);
+          setSelectedDriver(null);
+          setCreditAmount('');
+          setCreditDescription('');
+        }}
+        title="إضافة رصيد للمندوب"
+        size="sm"
+      >
+        <form onSubmit={handleAddCredit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">المندوب</label>
+            <div className="text-sm text-slate-600">{selectedDriver?.name}</div>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">المبلغ</label>
+            <input
+              type="number"
+              value={creditAmount}
+              onChange={(e) => setCreditAmount(e.target.value)}
+              placeholder="0.00"
+              step="0.01"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">الوصف</label>
+            <input
+              type="text"
+              value={creditDescription}
+              onChange={(e) => setCreditDescription(e.target.value)}
+              placeholder="سبب إضافة الرصيد"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+          >
+            إضافة الرصيد
+          </button>
+        </form>
+      </Modal>
+
+      {/* Password Change Modal */}
+      <Modal
+        isOpen={passwordChangeModalOpen}
+        onClose={() => setPasswordChangeModalOpen(false)}
+        title="تغيير كلمة المرور"
+        size="sm"
+      >
+        <form onSubmit={handlePasswordChange} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور الحالية</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">كلمة المرور الجديدة</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">تأكيد كلمة المرور الجديدة</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={settingsLoading}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white font-bold py-2 rounded-xl transition-colors"
+          >
+            {settingsLoading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }

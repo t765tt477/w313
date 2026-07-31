@@ -3,6 +3,10 @@ import {
   getAllDrivers,
   addDriverCredit,
   getDriverDetails,
+  getDriverBalanceTransactions,
+  getRechargeRequests,
+  approveRechargeRequest,
+  rejectRechargeRequest,
   getAllOrders,
   getAllClients,
   getAnalytics,
@@ -28,6 +32,12 @@ router.post('/drivers/credit', protect, authorize('admin', 'super_admin'), addDr
 router.get('/drivers/:id', protect, authorize('admin', 'super_admin'), getDriverDetails);
 router.put('/drivers/:id/approve', protect, authorize('admin', 'super_admin'), approveDriver);
 router.put('/drivers/:id/images', protect, authorize('admin', 'super_admin'), updateDriverImages);
+router.get('/drivers/:id/balance-transactions', protect, authorize('admin', 'super_admin'), getDriverBalanceTransactions);
+
+// Wallet recharge requests (bank transfer top-ups submitted by drivers)
+router.get('/recharge-requests', protect, authorize('admin', 'super_admin'), getRechargeRequests);
+router.put('/recharge-requests/:id/approve', protect, authorize('admin', 'super_admin'), approveRechargeRequest);
+router.put('/recharge-requests/:id/reject', protect, authorize('admin', 'super_admin'), rejectRechargeRequest);
 
 // Order routes (admin and super_admin)
 router.get('/orders', protect, authorize('admin', 'super_admin'), getAllOrders);

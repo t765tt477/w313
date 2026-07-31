@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { MapPin, Plus, Trash2, Edit2, Check, X, Pencil } from 'lucide-react';
 import { cityAPI } from '../services/api';
+import Modal from './Modal';
 
 interface City {
   _id: string;
@@ -17,6 +18,8 @@ export default function CitiesManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [error, setError] = useState('');
+  const [createCityModalOpen, setCreateCityModalOpen] = useState(false);
+  const [editCityModalOpen, setEditCityModalOpen] = useState(false);
 
   useEffect(() => {
     fetchCities();
@@ -60,6 +63,7 @@ export default function CitiesManager() {
   const startEditing = (city: City) => {
     setEditingId(city._id);
     setEditingName(city.name);
+    setEditCityModalOpen(true);
   };
 
   const handleSaveEdit = async (cityId: string) => {
@@ -90,24 +94,17 @@ export default function CitiesManager() {
         هذه المدن هي التي تظهر للزبائن والمندوبين عند إنشاء حساب جديد. عطّل مدينة لإيقاف الخدمة فيها مؤقتاً دون حذف بياناتها.
       </p>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 max-w-2xl">
-        <form onSubmit={handleAddCity} className="flex gap-3 mb-6">
-          <input
-            type="text"
-            value={newCityName}
-            onChange={(e) => setNewCityName(e.target.value)}
-            placeholder="اسم مدينة جديدة، مثال: القاهرة"
-            className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-          />
+      <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6 max-w-2xl">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-lg font-bold text-slate-800">إدارة المدن</h3>
           <button
-            type="submit"
-            disabled={adding || !newCityName.trim()}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 transition-colors"
+            onClick={() => setCreateCityModalOpen(true)}
+            className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            إضافة
+            إضافة مدينة
           </button>
-        </form>
+        </div>
 
         {error && (
           <div className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2.5 mb-4">{error}</div>
@@ -126,56 +123,95 @@ export default function CitiesManager() {
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <MapPin className={`w-4 h-4 shrink-0 ${city.isActive ? 'text-green-600' : 'text-slate-400'}`} />
-                  {editingId === city._id ? (
-                    <input
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                      autoFocus
-                    />
-                  ) : (
-                    <span className={`font-semibold text-sm truncate ${city.isActive ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
-                      {city.name}
-                    </span>
-                  )}
+                  <span className={`font-semibold text-sm truncate ${city.isActive ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                    {city.name}
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {editingId === city._id ? (
-                    <>
-                      <button onClick={() => handleSaveEdit(city._id)} className="p-1.5 hover:bg-green-100 rounded-lg text-green-600">
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setEditingId(null)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleToggleActive(city)}
-                        className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${city.isActive
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                          : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                          }`}
-                      >
-                        {city.isActive ? 'مفعّلة' : 'موقوفة'}
-                      </button>
-                      <button onClick={() => startEditing(city)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500">
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => handleDelete(city._id)} className="p-1.5 hover:bg-red-100 rounded-lg text-red-500">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  )}
+                  <button
+                    onClick={() => handleToggleActive(city)}
+                    className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${city.isActive
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                      }`}
+                  >
+                    {city.isActive ? 'مفعّلة' : 'موقوفة'}
+                  </button>
+                  <button onClick={() => startEditing(city)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500" title="تعديل">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => handleDelete(city._id)} className="p-1.5 hover:bg-red-100 rounded-lg text-red-500" title="حذف">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Create City Modal */}
+      <Modal
+        isOpen={createCityModalOpen}
+        onClose={() => setCreateCityModalOpen(false)}
+        title="إضافة مدينة جديدة"
+        size="sm"
+      >
+        <form onSubmit={handleAddCity} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">اسم المدينة</label>
+            <input
+              type="text"
+              value={newCityName}
+              onChange={(e) => setNewCityName(e.target.value)}
+              placeholder="اسم مدينة جديدة، مثال: القاهرة"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={adding || !newCityName.trim()}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl transition-colors"
+          >
+            {adding ? 'جاري الإضافة...' : 'إضافة المدينة'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Edit City Modal */}
+      <Modal
+        isOpen={editCityModalOpen}
+        onClose={() => {
+          setEditCityModalOpen(false);
+          setEditingId(null);
+        }}
+        title="تعديل اسم المدينة"
+        size="sm"
+      >
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          if (editingId) handleSaveEdit(editingId);
+        }} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">اسم المدينة</label>
+            <input
+              type="text"
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors"
+          >
+            حفظ التغييرات
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }

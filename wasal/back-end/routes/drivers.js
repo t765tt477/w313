@@ -10,7 +10,10 @@ import {
   getPendingOffer,
   updateOrderStatus,
   getDriverOrders,
-  getEarnings
+  getEarnings,
+  requestRecharge,
+  getMyRechargeRequests,
+  getMyBalanceTransactions
 } from '../controllers/driverController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -27,5 +30,8 @@ router.get('/pending-offer', protect, authorize('driver'), getPendingOffer);
 router.put('/order-status', protect, authorize('driver'), updateOrderStatus);
 router.get('/orders', protect, authorize('driver'), getDriverOrders);
 router.get('/earnings', protect, authorize('driver'), getEarnings);
+router.post('/recharge-request', protect, authorize('driver'), requestRecharge);
+router.get('/recharge-requests', protect, authorize('driver'), getMyRechargeRequests);
+router.get('/balance-transactions', protect, authorize('driver'), getMyBalanceTransactions);
 
 export default router;

@@ -51,6 +51,21 @@ const pricingSettingsSchema = new mongoose.Schema({
     default: 5,
     min: 0
   },
+  // Percentage of the trip value the company earns as commission. This is
+  // deducted from the driver's prepaid balance after each completed delivery.
+  commissionPercentage: {
+    type: Number,
+    default: 10,
+    min: 0,
+    max: 100
+  },
+  // If the driver's balance drops below this amount, they are prompted to
+  // recharge their balance.
+  minBalanceThreshold: {
+    type: Number,
+    default: 50,
+    min: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now

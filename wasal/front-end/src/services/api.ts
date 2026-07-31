@@ -46,6 +46,10 @@ export const driverAPI = {
   updateOrderStatus: (orderId: string, status: string) => api.put('/drivers/order-status', { orderId, status }),
   getDriverOrders: () => api.get('/drivers/orders'),
   getEarnings: () => api.get('/drivers/earnings'),
+  requestRecharge: (transactionLast6: string, amountSent: number) =>
+    api.post('/drivers/recharge-request', { transactionLast6, amountSent }),
+  getMyRechargeRequests: () => api.get('/drivers/recharge-requests'),
+  getMyBalanceTransactions: () => api.get('/drivers/balance-transactions'),
 };
 
 export const userAPI = {
@@ -60,6 +64,13 @@ export const chatAPI = {
   getMessages: (conversationId: string) => api.get(`/chats/${conversationId}/messages`),
   sendMessage: (conversationId: string, text: string) => api.post(`/chats/${conversationId}/messages`, { text }),
   markRead: (conversationId: string) => api.put(`/chats/${conversationId}/read`),
+};
+
+export const notificationAPI = {
+  getNotifications: () => api.get('/notifications'),
+  markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/mark-all-read'),
+  deleteNotification: (id: string) => api.delete(`/notifications/${id}`),
 };
 
 export default api;

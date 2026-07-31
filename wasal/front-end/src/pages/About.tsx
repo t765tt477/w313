@@ -89,7 +89,7 @@ export default function About() {
               key={f.title}
               className={`${f.color} border rounded-2xl p-4 hover:shadow-md transition-shadow`}
             ><div className="flex items-center gap-1.5">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm mb-4">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-xs mb-4">
                   <f.icon className={`w-6 h-6 ${f.iconColor}`} />
                 </div>
                 <h3 className="font-black text-slate-900 text-base mb-2">

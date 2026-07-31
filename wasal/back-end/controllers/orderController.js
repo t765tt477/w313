@@ -1,4 +1,6 @@
 import Order from '../models/Order.js';
+import Client from '../models/Client.js';
+import PricingSettings from '../models/PricingSettings.js';
 import dispatchService from '../services/dispatchService.js';
 import { broadcastToAdmins, createNotification } from './notificationController.js';
 import { emitToUser } from '../services/socketService.js';
@@ -15,13 +17,28 @@ export const createOrder = async (req, res) => {
       notes
     } = req.body;
 
+    // Use the client's city pricing settings when available, so admin-configured
+    // rates (and the commission percentage) are actually applied; fall back to
+    // sensible defaults if no settings exist yet for that city.
+    const client = await Client.findById(req.user.id).select('city');
+    const pricing = client?.city ? await PricingSettings.findOne({ cityId: client.city }) : null;
+
+    const basePricePerKm = pricing?.basePricePerKm ?? 2.00;
+    const weightFeePerKg = pricing?.weightFeePerKg ?? 0.50;
+    const sizeFeeMap = {
+      small: pricing?.sizeSmallFee ?? 0,
+      medium: pricing?.sizeMediumFee ?? 1,
+      large: pricing?.sizeLargeFee ?? 2
+    };
+    const commissionPercentage = pricing?.commissionPercentage ?? 10;
+
     // Calculate price
-    const basePrice = distance * 2.00;
-    const weightFee = (packageDetails.weight || 0) * 0.50;
-    const sizeFee = (packageDetails.size === 'large' ? 2 : packageDetails.size === 'medium' ? 1 : 0);
+    const basePrice = distance * basePricePerKm;
+    const weightFee = (packageDetails.weight || 0) * weightFeePerKg;
+    const sizeFee = sizeFeeMap[packageDetails.size] ?? 0;
     const totalPrice = basePrice + weightFee + sizeFee;
-    const platformFee = totalPrice * 0.10;
-    const driverEarnings = totalPrice * 0.90;
+    const platformFee = totalPrice * (commissionPercentage / 100);
+    const driverEarnings = totalPrice - platformFee;
 
     const order = await Order.create({
       client: req.user.id,

@@ -2,14 +2,17 @@ import { useState, useEffect } from "react"
 import { Car, MapPin, Eye, EyeOff } from "lucide-react"
 import About from "./pages/About"
 import Profile from "./pages/Profile"
+import Notifications from "./pages/Notifications"
 import ChatWidget from "./components/ChatWidget"
 import LocationPicker from "./components/LocationPicker"
 import RouteMap from "./components/RouteMap"
+import NotificationBell from "./components/NotificationBell"
+import NotificationBellMobile from "./components/NotificationBellMobile"
 import { authAPI, orderAPI, driverAPI, cityAPI } from "./services/api"
 import { getSocket, disconnectSocket } from "./services/socket"
 import { playNotificationSound, playIncomingOrderSound } from "./utils/sound"
 
-type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat" | "driver-pending"
+type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat" | "driver-pending" | "driver-recharge" | "my-orders" | "notifications"
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>("landing")
@@ -25,6 +28,7 @@ export default function App() {
   // Orders state
   const [orders, setOrders] = useState<any[]>([])
   const [currentOrder, setCurrentOrder] = useState<any>(null)
+  const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<any>(null)
   const [ratingValue, setRatingValue] = useState(0)
   const [ratingHover, setRatingHover] = useState(0)
   const [ratingSubmitting, setRatingSubmitting] = useState(false)
@@ -33,6 +37,15 @@ export default function App() {
   const [driverProfile, setDriverProfile] = useState<any>(null)
   const [driverEarnings, setDriverEarnings] = useState<any[]>([])
   const [isDriverAvailable, setIsDriverAvailable] = useState(true)
+  const [rechargeForm, setRechargeForm] = useState({ transactionLast6: '', amountSent: '' })
+  const [rechargeErrors, setRechargeErrors] = useState({ transactionLast6: '', amountSent: '' })
+  const [submittingRecharge, setSubmittingRecharge] = useState(false)
+  const [rechargeSuccess, setRechargeSuccess] = useState(false)
+  const [rechargeSuccessMessage, setRechargeSuccessMessage] = useState('')
+  const [rechargeRequests, setRechargeRequests] = useState<any[]>([])
+  const [balanceTransactions, setBalanceTransactions] = useState<any[]>([])
+  const [lowBalanceWarning, setLowBalanceWarning] = useState<string | null>(null)
+  const [showRechargePopup, setShowRechargePopup] = useState(false)
 
   // Real-time dispatch state
   const [incomingOffer, setIncomingOffer] = useState<any>(null) // order offered to this driver, awaiting accept/reject
@@ -83,6 +96,20 @@ export default function App() {
       loadUserData()
     }
   }, [token])
+
+  // Load client orders when user role is known or when entering my-orders page
+  useEffect(() => {
+    if (token && user?.role === 'client') {
+      loadClientOrders()
+    }
+  }, [token, user?.role])
+
+  // Load orders when entering my-orders page
+  useEffect(() => {
+    if (activeView === 'my-orders' && token && user?.role === 'client') {
+      loadClientOrders()
+    }
+  }, [activeView])
 
   // Load available service cities for the registration forms
   useEffect(() => {
@@ -148,12 +175,41 @@ export default function App() {
       setTrackedDriverPosition({ lat: payload.lat, lng: payload.lng })
     }
 
+    // Driver's wallet balance changed (commission deducted, recharge approved, etc.)
+    const onBalanceUpdated = (payload: any) => {
+      setDriverProfile((prev: any) => prev ? { ...prev, balance: payload.balance } : prev)
+    }
+
+    // Driver's balance dropped below the minimum threshold - show a warning
+    // with a direct "recharge" action.
+    const onBalanceLow = (notification: any) => {
+      if (notification?.sound) playNotificationSound()
+      setLowBalanceWarning(notification?.message || 'رصيدك غير كافٍ، يرجى شحن الرصيد')
+    }
+
+    // A previously-submitted recharge request was approved or rejected.
+    const onRechargeReviewed = (payload: any) => {
+      playNotificationSound()
+      setMessage(
+        payload?.status === 'approved'
+          ? 'تمت الموافقة على طلب شحن رصيدك'
+          : payload?.rechargeRequest?.reviewNote
+            ? `تم رفض طلب شحن رصيدك: ${payload.rechargeRequest.reviewNote}`
+            : 'تم رفض طلب شحن رصيدك'
+      )
+      if (payload?.status === 'approved') setLowBalanceWarning(null)
+      driverAPI.getMyRechargeRequests().then((res) => setRechargeRequests(res.data.rechargeRequests || [])).catch(() => { })
+    }
+
     socket.on('notification:new', onNotification)
     socket.on('order:new_offer', onNewOffer)
     socket.on('order:accepted', onOrderAccepted)
     socket.on('order:status_changed', onStatusChanged)
     socket.on('order:timeout', onOrderTimeout)
     socket.on('driver:location', onDriverLocation)
+    socket.on('balance:updated', onBalanceUpdated)
+    socket.on('balance:low', onBalanceLow)
+    socket.on('recharge:reviewed', onRechargeReviewed)
 
     return () => {
       socket.off('notification:new', onNotification)
@@ -162,6 +218,9 @@ export default function App() {
       socket.off('order:status_changed', onStatusChanged)
       socket.off('order:timeout', onOrderTimeout)
       socket.off('driver:location', onDriverLocation)
+      socket.off('balance:updated', onBalanceUpdated)
+      socket.off('balance:low', onBalanceLow)
+      socket.off('recharge:reviewed', onRechargeReviewed)
     }
   }, [token])
 
@@ -253,10 +312,12 @@ export default function App() {
       const userRes = await authAPI.getMe()
       setUser(userRes.data.user)
 
-      const ordersRes = await orderAPI.getUserOrders()
-      setOrders(ordersRes.data.orders)
-      if (ordersRes.data.orders.length > 0) {
-        setCurrentOrder(ordersRes.data.orders[0])
+      if (userRes.data.user.role === 'client') {
+        const ordersRes = await orderAPI.getUserOrders()
+        setOrders(ordersRes.data.orders || [])
+        if (ordersRes.data.orders.length > 0) {
+          setCurrentOrder(ordersRes.data.orders[0])
+        }
       }
 
       if (userRes.data.user.role === 'driver') {
@@ -270,6 +331,20 @@ export default function App() {
           setDriverEarnings(earningsRes.data.earnings || [])
         } catch (error) {
           console.error('Error loading earnings:', error)
+        }
+
+        // Load wallet data (recharge requests + balance history)
+        try {
+          const rechargeRes = await driverAPI.getMyRechargeRequests()
+          setRechargeRequests(rechargeRes.data.rechargeRequests || [])
+        } catch (error) {
+          console.error('Error loading recharge requests:', error)
+        }
+        try {
+          const transactionsRes = await driverAPI.getMyBalanceTransactions()
+          setBalanceTransactions(transactionsRes.data.transactions || [])
+        } catch (error) {
+          console.error('Error loading balance transactions:', error)
         }
       }
     } catch (error) {
@@ -411,8 +486,10 @@ export default function App() {
       })
       setCurrentOrder(res.data.order)
       setOrders([res.data.order, ...orders])
+      setSelectedOrderForTracking(res.data.order)
       setRatingValue(0)
       setRatingHover(0)
+      setActiveView('my-orders')
       setMessage('تم إنشاء الطلب بنجاح')
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إنشاء الطلب')
@@ -483,17 +560,42 @@ export default function App() {
     setLoading(false)
   }
 
-  const handleReorder = () => {
-    if (!currentOrder) return
-    // Restore the order data to the form
-    setPickupLocation(currentOrder.pickupLocation)
-    setDeliveryLocation(currentOrder.deliveryLocation)
-    setOrderForm({
-      weight: currentOrder.packageDetails?.weight || 3,
-      size: currentOrder.packageDetails?.size === 'small' ? '1' : currentOrder.packageDetails?.size === 'medium' ? '2' : '3'
-    })
-    setCurrentOrder(null)
-    setMessage('تم استعادة بيانات الطلب، يمكنك تعديلها وإرسالها مرة أخرى')
+  const handleReorder = async (order: any) => {
+    if (!order) return
+    setLoading(true)
+    try {
+      const distance = calculateDistance(
+        { lat: order.pickupLocation.lat, lng: order.pickupLocation.lng },
+        { lat: order.deliveryLocation.lat, lng: order.deliveryLocation.lng }
+      )
+      const res = await orderAPI.createOrder({
+        pickupLocation: order.pickupLocation,
+        deliveryLocation: order.deliveryLocation,
+        packageDetails: order.packageDetails,
+        distance,
+        paymentMethod: order.paymentMethod || 'cash'
+      })
+      setCurrentOrder(res.data.order)
+      setOrders([res.data.order, ...orders])
+      setSelectedOrderForTracking(res.data.order)
+      setRatingValue(0)
+      setRatingHover(0)
+      setMessage('تم إعادة الطلب بنجاح')
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'فشل إعادة الطلب')
+    }
+    setLoading(false)
+  }
+
+  const loadClientOrders = async () => {
+    if (!token) return
+    try {
+      const res = await orderAPI.getUserOrders()
+      console.log('Orders loaded:', res.data.orders)
+      setOrders(res.data.orders || [])
+    } catch (error) {
+      console.error('Error loading orders:', error)
+    }
   }
 
   // Driver handlers
@@ -556,6 +658,59 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل تحديث الحالة')
     }
+  }
+
+  const handleSubmitRecharge = async () => {
+    const errors = { transactionLast6: '', amountSent: '' }
+
+    if (!rechargeForm.transactionLast6.trim()) {
+      errors.transactionLast6 = 'يرجى إدخال آخر 6 أرقام من عملية التحويل'
+    } else if (rechargeForm.transactionLast6.trim().length !== 6) {
+      errors.transactionLast6 = 'يجب أن يكون رقم العملية 6 أرقام'
+    }
+
+    if (!rechargeForm.amountSent || Number(rechargeForm.amountSent) <= 0) {
+      errors.amountSent = 'يرجى إدخال قيمة المبلغ المرسل'
+    }
+
+    setRechargeErrors(errors)
+
+    if (errors.transactionLast6 || errors.amountSent) {
+      return
+    }
+
+    setSubmittingRecharge(true)
+    try {
+      await driverAPI.requestRecharge(rechargeForm.transactionLast6.trim(), Number(rechargeForm.amountSent))
+      setRechargeSuccessMessage('تم إرسال طلب الشحن، سيتم مراجعته قريبًا')
+      setRechargeSuccess(true)
+      setRechargeForm({ transactionLast6: '', amountSent: '' })
+      setRechargeErrors({ transactionLast6: '', amountSent: '' })
+      const rechargeRes = await driverAPI.getMyRechargeRequests()
+      setRechargeRequests(rechargeRes.data.rechargeRequests || [])
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'فشل إرسال طلب الشحن'
+
+      // Check if error is about duplicate transaction
+      if (errorMessage.includes('مسجل مسبقاً') || errorMessage.includes('استخدام نفس الرقم')) {
+        setRechargeErrors({
+          transactionLast6: errorMessage,
+          amountSent: ''
+        })
+      } else {
+        setRechargeSuccessMessage(errorMessage)
+        setRechargeSuccess(true)
+      }
+    } finally {
+      setSubmittingRecharge(false)
+    }
+  }
+
+  const handleResetRechargeForm = () => {
+    setRechargeSuccess(false)
+    setRechargeSuccessMessage('')
+    setRechargeForm({ transactionLast6: '', amountSent: '' })
+    setRechargeErrors({ transactionLast6: '', amountSent: '' })
   }
 
   const handleUpdateDriverOrderStatus = async (status: 'picked_up' | 'delivered') => {
@@ -665,10 +820,22 @@ export default function App() {
 
             {/* Nav links */}
             <nav className="hidden md:flex items-center gap-1">
+              {/* Notification Bell */}
+              {token && (
+                <NotificationBell
+                  onViewNotifications={() => setActiveView("notifications")}
+                />
+              )}
               {[
                 ...(!token ? [
                   { id: "client" as View, label: "تطبيق الزبون" },
                   { id: "driver" as View, label: "تطبيق المندوب" },
+                ] : []),
+                ...(token && user?.role === 'driver' ? [
+                  { id: "driver" as View, label: "تطبيق المندوب" },
+                ] : []),
+                ...(token && user?.role !== 'driver' ? [
+                  { id: "my-orders" as View, label: "طلباتي" },
                 ] : []),
                 { id: "about" as View, label: "عن وصل" },
                 ...(token ? [{ id: "chat" as View, label: "الدردشة" }] : []),
@@ -678,22 +845,25 @@ export default function App() {
                   key={item.id}
                   onClick={() => setActiveView(item.id)}
                   className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeView === item.id
-                    ? "bg-yellow-400 text-green-800 shadow-sm"
+                    ? "bg-yellow-400 text-green-800 shadow-xs"
                     : "text-yellow-500 hover:bg-yellow-50 hover:text-yellow-700"
                     }`}
                 >
                   {item.label}
                 </button>
               ))}
+
             </nav>
 
             {/* CTA */}
             <button
               onClick={() => setActiveView("client")}
-              className="bg-yellow-400 hover:bg-yellow-300 text-green-900 font-bold px-5 py-2 rounded-xl text-sm transition-all shadow-sm hover:shadow-md active:scale-95"
+              className="bg-yellow-400 hover:bg-yellow-300 text-green-900 font-bold px-5 py-2 rounded-xl text-sm transition-all shadow-xs hover:shadow-md active:scale-95"
             >
               ابدأ الآن
             </button>
+
+
           </div>
         </div>
       </header>
@@ -790,7 +960,7 @@ export default function App() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => setActiveView("client")}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-8 py-3 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
+                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-7.5 py-3 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
                     >
                       أرسل طلبًا الآن
                     </button>
@@ -973,6 +1143,184 @@ export default function App() {
       {/* ─── PROFILE PAGE ─── */}
       {activeView === "profile" && <Profile user={user} onLogout={handleLogout} />}
 
+      {/* ─── NOTIFICATIONS PAGE ─── */}
+      {activeView === "notifications" && token && (
+        <Notifications
+          user={user}
+          onViewOrders={() => setActiveView("my-orders")}
+          onViewProfile={() => setActiveView("profile")}
+          onBack={() => setActiveView("landing")}
+        />
+      )}
+
+      {/* ─── DRIVER RECHARGE PAGE ─── */}
+      {activeView === "driver-recharge" && token && user?.role === 'driver' && (
+        <div className="top-spacing pb-10 max-w-lg mx-auto px-4 md:px-0">
+          <button
+            onClick={() => setActiveView('driver')}
+            className="flex items-center gap-1 text-sm text-slate-500 hover:text-green-700 mb-4"
+          >
+            <span>→</span> العودة لتطبيق المندوب
+          </button>
+
+          <h1 className="text-xl font-black text-slate-900 mb-1">شحن الرصيد</h1>
+          <p className="text-sm text-slate-500 mb-6">
+            رصيدك الحالي: <span className="font-bold text-green-700">{(driverProfile?.balance || 0).toFixed(2)} جنيه</span>
+          </p>
+
+          {/* Bank transfer recharge form */}
+          {!rechargeSuccess ? (
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-5 mb-6">
+              <h2 className="font-black text-slate-800 mb-1">شحن عبر التحويل البنكي (بنكك)</h2>
+              <p className="text-xs text-slate-400 mb-4">
+                أرسل المبلغ عبر تطبيق بنكك، ثم أدخل آخر 6 أرقام من عملية التحويل وقيمة المبلغ المرسل بالجنيه السوداني.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">آخر 6 أرقام من عملية التحويل</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={rechargeForm.transactionLast6}
+                    onChange={(e) => {
+                      setRechargeForm({ ...rechargeForm, transactionLast6: e.target.value.replace(/\D/g, '').slice(0, 6) })
+                      if (rechargeErrors.transactionLast6) {
+                        setRechargeErrors({ ...rechargeErrors, transactionLast6: '' })
+                      }
+                    }}
+                    placeholder="مثال: 482913"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 ${rechargeErrors.transactionLast6
+                      ? 'border-red-500 focus:ring-red-400'
+                      : 'border-slate-200 focus:ring-green-400'
+                      }`}
+                  />
+                  {rechargeErrors.transactionLast6 && (
+                    <p className="text-red-500 text-xs mt-1">{rechargeErrors.transactionLast6}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">قيمة المبلغ المرسل (جنيه سوداني)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={rechargeForm.amountSent}
+                    onChange={(e) => {
+                      setRechargeForm({ ...rechargeForm, amountSent: e.target.value })
+                      if (rechargeErrors.amountSent) {
+                        setRechargeErrors({ ...rechargeErrors, amountSent: '' })
+                      }
+                    }}
+                    placeholder="0.00"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 ${rechargeErrors.amountSent
+                      ? 'border-red-500 focus:ring-red-400'
+                      : 'border-slate-200 focus:ring-green-400'
+                      }`}
+                  />
+                  {rechargeErrors.amountSent && (
+                    <p className="text-red-500 text-xs mt-1">{rechargeErrors.amountSent}</p>
+                  )}
+                </div>
+                <button
+                  onClick={handleSubmitRecharge}
+                  disabled={submittingRecharge}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-2.5 rounded-xl transition-colors"
+                >
+                  {submittingRecharge ? 'جاري الإرسال...' : 'إرسال طلب الشحن'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-8 mb-6 text-center">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2">
+                {rechargeSuccessMessage.includes('فشل') ? 'فشل طلب الشحن' : 'تم طلب الشحن'}
+              </h2>
+              <p className={`text-sm mb-6 ${rechargeSuccessMessage.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                {rechargeSuccessMessage}
+              </p>
+              <button
+                onClick={handleResetRechargeForm}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors"
+              >
+                إعادة الشحن
+              </button>
+            </div>
+          )}
+
+          {/* Recharge requests history */}
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-5 mb-6">
+            <h2 className="font-black text-slate-800 mb-3">طلبات الشحن السابقة</h2>
+            {rechargeRequests.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">لا توجد طلبات شحن بعد</p>
+            ) : (
+              <div className="space-y-2">
+                {rechargeRequests.map((req: any) => (
+                  <div key={req._id} className="flex items-center justify-between border border-slate-100 rounded-xl p-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-800">{req.amountSent.toFixed(2)} جنيه</div>
+                      <div className="text-xs text-slate-400">
+                        {new Date(req.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </div>
+                      {req.status === 'rejected' && req.reviewNote && (
+                        <div className="text-xs text-red-600 mt-1">سبب الرفض: {req.reviewNote}</div>
+                      )}
+                    </div>
+                    <span
+                      className={`text-xs font-semibold px-3 py-1 rounded-full ${req.status === 'pending'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : req.status === 'approved'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                        }`}
+                    >
+                      {req.status === 'pending' ? 'قيد المراجعة' : req.status === 'approved' ? 'تمت الموافقة' : 'مرفوض'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Balance transaction history */}
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-5">
+            <h2 className="font-black text-slate-800 mb-3">سجل حركة الرصيد</h2>
+            {balanceTransactions.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">لا توجد عمليات على الرصيد بعد</p>
+            ) : (
+              <div className="space-y-2">
+                {balanceTransactions.map((t: any) => {
+                  const isPositive = t.amount >= 0
+                  const typeLabel = {
+                    recharge_bank: 'شحن بنكي',
+                    recharge_cash: 'شحن نقدي',
+                    commission_deduction: 'خصم عمولة',
+                    adjustment: 'تعديل'
+                  }[t.type as string] || t.type
+                  return (
+                    <div key={t._id} className="flex items-center justify-between border border-slate-100 rounded-xl p-3">
+                      <div>
+                        <div className="text-xs text-slate-500">{typeLabel}</div>
+                        <div className="text-xs text-slate-400">
+                          {new Date(t.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </div>
+                      </div>
+                      <div className={`text-sm font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPositive ? '+' : ''}{t.amount.toFixed(2)} جنيه
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ─── CLIENT APP ─── */}
       {activeView === "client" && (
         <div className="top-spacing pb-6">
@@ -984,12 +1332,12 @@ export default function App() {
           </div>
 
           {token && user?.role === 'driver' ? (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+            <div className="bg-red-50 border border-red-200 rounded-2xl mx-8 p-4 text-center">
               <h2 className="text-lg font-black text-red-800 mb-2">عفواً، هذه الصفحة للزبائن فقط</h2>
               <p className="text-red-600 mb-4">أنت مسجل دخول كمندوب. يرجى استخدام تطبيق المندوب.</p>
               <button
                 onClick={() => setActiveView('driver')}
-                className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-2.5 rounded-lg transition-colors"
               >
                 الانتقال لتطبيق المندوب
               </button>
@@ -1329,7 +1677,7 @@ export default function App() {
               {/* Order creation */}
               <div className="lg:col-span-5 space-y-4">
                 {/* New order */}
-                <div className="bg-white border border-slate-100 pt-2 pb-6">
+                <div className="bg-white pb-6">
                   <h2 className="text-sm font-black text-slate-900 mb-6 px-4">
                     إنشاء طلب توصيل جديد
                   </h2>
@@ -1516,10 +1864,11 @@ export default function App() {
                           يمكنك إعادة إنشاء الطلب في أي وقت
                         </div>
                         <button
-                          onClick={handleReorder}
-                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm"
+                          onClick={() => handleReorder(currentOrder)}
+                          disabled={loading}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm disabled:opacity-50"
                         >
-                          إعادة الطلب
+                          {loading ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
                         </button>
                       </div>
                     )}
@@ -1651,10 +2000,257 @@ export default function App() {
                 )}
               </div>
             </div>
-          )
-          }
-        </div >
+          )}
+        </div>
       )}
+
+      {/* ─── MY ORDERS PAGE ─── */}
+      {activeView === "my-orders" && token && (
+        <div className="order-tracking">
+
+          {!selectedOrderForTracking ? (
+            <div className="px-4 md:px-8 top-spacing flex flex-wrap">
+              {orders.length === 0 ? (
+                <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-8 text-center">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-black text-slate-900 mb-2">لا توجد طلبات بعد</h2>
+                  <p className="text-slate-500 mb-4">ابدأ بإنشاء طلب توصيل جديد</p>
+                  <button
+                    onClick={() => setActiveView('client')}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                  >
+                    إنشاء طلب جديد
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-500">عدد الطلبات: {orders.length}</p>
+                  <section className="flex flex-row flex-wrap justify-center gap-3">
+                    {orders.map((order) => (
+                      <div key={order._id} className="bg-white max-w-sm rounded-2xl shadow-xs p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
+                              <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="font-bold text-yellow-600">طلب #{order._id?.slice(-6) || '---'}</div>
+                              <div className="text-xs text-slate-500">
+                                {new Date(order.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`font-bold text-sm px-3 py-1 rounded-full ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            order.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
+                              order.status === 'picked_up' ? 'bg-purple-100 text-purple-700' :
+                                order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                  'bg-red-100 text-red-700'
+                            }`}>
+                            {order.status === 'pending' ? 'قيد الانتظار' :
+                              order.status === 'accepted' ? 'تم القبول' :
+                                order.status === 'picked_up' ? 'تم الاستلام' :
+                                  order.status === 'delivered' ? 'تم التسليم' :
+                                    'ملغي'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
+                          <div>
+                            <div className="text-slate-500 text-xs mb-1">من</div>
+                            <div className="text-slate-900 font-medium truncate">{order.pickupLocation?.address || '---'}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500 text-xs mb-1">إلى</div>
+                            <div className="text-slate-900 font-medium truncate">{order.deliveryLocation?.address || '---'}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm mb-3">
+                          <div className="text-slate-500">
+                            <span className="font-semibold text-slate-700">التكلفة:</span>
+                            <span className="font-bold text-green-700 mr-1">{order.price?.toFixed(2) || '0.00'} جنيه</span>
+                          </div>
+                          {order.driver && (
+                            <div className="text-slate-500">
+                              <span className="font-semibold text-slate-700">المندوب:</span>
+                              <span className="font-medium text-slate-900 mr-1">{order.driver.name || '---'}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          {['pending', 'accepted', 'picked_up'].includes(order.status) && (
+                            <button
+                              onClick={() => setSelectedOrderForTracking(order)}
+                              className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 rounded-xl transition-colors text-sm"
+                            >
+                              تتبع الطلب
+                            </button>
+                          )}
+                          {order.status === 'cancelled' && (
+                            <button
+                              onClick={() => handleReorder(order)}
+                              disabled={loading}
+                              className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-xl transition-colors text-sm disabled:opacity-50"
+                            >
+                              {loading ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
+                            </button>
+                          )}
+                          {order.status === 'pending' && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm('هل أنت متأكد من إلغاء هذا الطلب؟')) return
+                                setLoading(true)
+                                try {
+                                  const res = await orderAPI.cancelOrder(order._id, { reason: 'client' })
+                                  setOrders((prev) => prev.map((o) => o._id === res.data.order._id ? res.data.order : o))
+                                  setMessage('تم إلغاء الطلب بنجاح')
+                                } catch (error: any) {
+                                  setMessage(error.response?.data?.message || 'تعذر إلغاء الطلب')
+                                }
+                                setLoading(false)
+                              }}
+                              disabled={loading}
+                              className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-xl transition-colors text-sm disabled:opacity-50"
+                            >
+                              {loading ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                            </button>
+                          )}
+                        </div>
+
+                      </div>
+                    ))}
+                  </section>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="relative w-full h-screen overflow-hidden">
+              {/* Full screen map */}
+              <div className="absolute inset-0 z-0">
+                <RouteMap
+                  pickup={selectedOrderForTracking.pickupLocation}
+                  delivery={selectedOrderForTracking.deliveryLocation}
+                  driverPosition={trackedDriverPosition}
+                  height="100vh"
+                />
+              </div>
+
+              {/* Floating back button */}
+              <button
+                onClick={() => setSelectedOrderForTracking(null)}
+                className="absolute top-28 right-6.5 z-10 bg-white/95 backdrop-blur-sm shadow-lg border border-red-500 rounded-full p-1.5 hover:bg-white transition-colors"
+              >
+                <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Floating order info card */}
+              <div className="absolute top-28 left-4 right-16 z-10">
+                <div className="bg-white/95 backdrop-blur-sm w-fit shadow-lg rounded-2xl p-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <h2 className="text-sm font-black text-slate-900">
+                      تتبع الطلب #{selectedOrderForTracking._id?.slice(-6) || '---'}
+                    </h2>
+                    <span className={`font-bold text-xs px-3 py-1 rounded-full ${selectedOrderForTracking.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      selectedOrderForTracking.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
+                        selectedOrderForTracking.status === 'picked_up' ? 'bg-purple-100 text-purple-700' :
+                          selectedOrderForTracking.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                            'bg-red-100 text-red-700'
+                      }`}>
+                      {selectedOrderForTracking.status === 'pending' ? 'قيد الانتظار' :
+                        selectedOrderForTracking.status === 'accepted' ? 'تم القبول' :
+                          selectedOrderForTracking.status === 'picked_up' ? 'تم الاستلام' :
+                            selectedOrderForTracking.status === 'delivered' ? 'تم التسليم' :
+                              'ملغي'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Floating location info */}
+              <div className="absolute bottom-3 p-1 left-4 right-4 z-10">
+                <div className="bg-white/95 backdrop-blur-sm shadow-lg rounded-2xl space-y-2 w-fit">
+                  <div className="flex flex-col gap-1 p-1 text-sm w-fit">
+                    <div className="bg-green-50 rounded-xl border border-green-100">
+                      <div className="font-semibold text-green-800 mb-1 text-xs">📍 الاستلام</div>
+                      <div className="text-slate-600 text-xs">{selectedOrderForTracking.pickupLocation?.address || '---'}</div>
+                    </div>
+                    <div className="bg-yellow-50 rounded-xl border border-yellow-100">
+                      <div className="font-semibold text-yellow-800 mb-1 text-xs">🎯 التسليم</div>
+                      <div className="text-slate-600 text-xs">{selectedOrderForTracking.deliveryLocation?.address || '---'}</div>
+                    </div>
+                  </div>
+
+                  {selectedOrderForTracking.driver && (
+                    <div className="bg-slate-50 rounded-xl p-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                          {selectedOrderForTracking.driver.name?.[0] || 'م'}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 text-sm">{selectedOrderForTracking.driver.name || '---'}</div>
+                          <div className="text-xs text-slate-500">{selectedOrderForTracking.driver.phone || '---'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Floating action buttons */}
+              <div className="absolute bottom-35 left-4 right-4 z-10">
+                <div className="flex flex-col w-fit gap-2">
+                  {selectedOrderForTracking.status === 'pending' && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm('هل أنت متأكد من إلغاء هذا الطلب؟')) return
+                        setLoading(true)
+                        try {
+                          const res = await orderAPI.cancelOrder(selectedOrderForTracking._id, { reason: 'client' })
+                          setOrders((prev) => prev.map((o) => o._id === res.data.order._id ? res.data.order : o))
+                          setSelectedOrderForTracking(null)
+                          setMessage('تم إلغاء الطلب بنجاح')
+                        } catch (error: any) {
+                          setMessage(error.response?.data?.message || 'تعذر إلغاء الطلب')
+                        }
+                        setLoading(false)
+                      }}
+                      disabled={loading}
+                      className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold p-1.5 rounded-xl transition-colors text-sm disabled:opacity-50 shadow-lg"
+                    >
+                      {loading ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                    </button>
+                  )}
+                  {selectedOrderForTracking.status === 'cancelled' && (
+                    <button
+                      onClick={() => handleReorder(selectedOrderForTracking)}
+                      disabled={loading}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold p-1.5 rounded-xl transition-colors text-sm disabled:opacity-50 shadow-lg"
+                    >
+                      {loading ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setActiveView('client')}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold p-1.5 rounded-xl transition-colors text-sm shadow-lg"
+                  >
+                    طلب جديد
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+      }
 
       {/* ─── DRIVER APP ─── */}
       {
@@ -1903,7 +2499,7 @@ export default function App() {
                       <div className="lg:col-span-2">
                         {/* Step 1 */}
                         {driverStep === 1 && (
-                          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+                          <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4">
                             <h2 className="text-base font-black text-slate-900 mb-4">
                               البيانات الشخصية
                             </h2>
@@ -2069,7 +2665,7 @@ export default function App() {
 
                         {/* Step 2 */}
                         {driverStep === 2 && (
-                          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                          <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-6">
                             <h2 className="text-base font-black text-slate-900 mb-6">
                               بيانات المركبة
                             </h2>
@@ -2187,7 +2783,7 @@ export default function App() {
 
                         {/* Step 3 */}
                         {driverStep === 3 && (
-                          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                          <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-6">
                             <h2 className="text-base font-black text-slate-900 mb-2">
                               المستندات المطلوبة
                             </h2>
@@ -2311,7 +2907,7 @@ export default function App() {
               <>
                 {/* Active order in progress - map + status controls */}
                 {currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status) && (
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4 mb-6">
+                  <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4 mb-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-base font-black text-slate-900">
                         طلب جارٍ #{currentOrder._id?.slice(-6)}
@@ -2393,7 +2989,7 @@ export default function App() {
                     ) : null}
 
                     {/* Greeting + availability toggle */}
-                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 mb-6">
+                    <div className="bg-white border border-slate-100 rounded-lg shadow-xs p-4 mb-4">
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div>
                           <h2 className="text-lg font-black text-slate-900">
@@ -2410,39 +3006,68 @@ export default function App() {
                         <button
                           onClick={handleToggleAvailability}
                           disabled={!driverProfile.isApproved || driverProfile.isSuspended}
-                          className={`px-6 py-2 rounded-xl font-bold transition-colors disabled:opacity-40 ${isDriverAvailable
+                          className={`p-2 rounded-2xl text-xs transition-colors disabled:opacity-40 ${isDriverAvailable
                             ? 'bg-green-600 hover:bg-green-700 text-white'
-                            : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                            : 'bg-red-500 hover:bg-red-600 text-white'
                             }`}
                         >
-                          {isDriverAvailable ? '🟢 متاح لاستقبال الطلبات' : '⚪ غير متاح'}
+                          {isDriverAvailable ? '🟢 متاح' : '⚪ غير متاح'}
                         </button>
                       </div>
                     </div>
 
+                    {/* Low balance warning */}
+                    {(lowBalanceWarning || (driverProfile.balance ?? 0) < 50) && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-2 mb-4 flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">⚠️</span>
+                          <div>
+                            <div className="font-black text-red-800">رصيدك غير كافٍ</div>
+                            <div className="text-sm text-red-700">
+                              {lowBalanceWarning || 'يرجى شحن الرصيد لمواصلة استقبال الطلبات.'}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setShowRechargePopup(true)}
+                          className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-sm whitespace-nowrap"
+                        >
+                          طلب شحن رصيد
+                        </button>
+                      </div>
+                    )}
+
                     {/* Stats */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                        <div className="text-2xl font-black text-green-700">{driverProfile.totalDeliveries || 0}</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+                      <div className="bg-green-500/10 border border-slate-100 rounded-lg p-1 text-center">
+                        <div className="text-base font-black text-green-700">{driverProfile.totalDeliveries || 0}</div>
                         <div className="text-xs text-slate-500 mt-1">توصيلات مكتملة</div>
                       </div>
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                        <div className="text-2xl font-black text-green-700">{(driverProfile.balance || 0).toFixed(0)}</div>
+                      <div className="bg-green-500/10 border border-slate-100 rounded-lg p-1 text-center">
+                        <div className="text-base font-black text-green-700">{(driverProfile.balance || 0).toFixed(0)}</div>
                         <div className="text-xs text-slate-500 mt-1">رصيدك (جنيه)</div>
                       </div>
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                        <div className="text-2xl font-black text-green-700">{(driverProfile.totalEarnings || 0).toFixed(0)}</div>
+                      <div className="bg-green-500/10 border border-slate-100 rounded-lg p-1 text-center">
+                        <div className="text-base font-black text-green-700">{(driverProfile.totalEarnings || 0).toFixed(0)}</div>
                         <div className="text-xs text-slate-500 mt-1">إجمالي الأرباح</div>
                       </div>
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 text-center shadow-sm">
-                        <div className="text-2xl font-black text-green-700">{(driverProfile.rating || 0).toFixed(1)} ⭐</div>
+                      <div className="bg-green-500/10 border border-slate-100 rounded-lg p-1 text-center">
+                        <div className="text-base font-black text-green-700">{(driverProfile.rating || 0).toFixed(1)} ⭐</div>
                         <div className="text-xs text-slate-500 mt-1">التقييم</div>
                       </div>
                     </div>
 
+                    {/* Recharge button */}
+                    <button
+                      onClick={() => setShowRechargePopup(true)}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors mb-6 shadow-sm"
+                    >
+                      💰 شحن الرصيد
+                    </button>
+
                     {/* Waiting state (no active order) */}
                     {!(currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status)) && driverProfile.isApproved && (
-                      <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center">
+                      <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-5 text-center">
                         <div className="text-4xl mb-3">{isDriverAvailable ? '📡' : '💤'}</div>
                         <div className="font-black text-slate-700 mb-1">
                           {isDriverAvailable ? 'بانتظار طلب جديد' : 'قم بتفعيل حالتك لاستقبال الطلبات'}
@@ -2483,7 +3108,7 @@ export default function App() {
                     <div className="lg:col-span-2">
                       {/* Step 1 */}
                       {driverStep === 1 && (
-                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4">
                           <h2 className="text-base font-black text-slate-900 mb-4">
                             البيانات الشخصية
                           </h2>
@@ -2571,7 +3196,7 @@ export default function App() {
 
                       {/* Step 2 */}
                       {driverStep === 2 && (
-                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-6">
                           <h2 className="text-base font-black text-slate-900 mb-6">
                             بيانات المركبة
                           </h2>
@@ -2638,7 +3263,7 @@ export default function App() {
 
                       {/* Step 3 */}
                       {driverStep === 3 && (
-                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-6">
                           <h2 className="text-base font-black text-slate-900 mb-2">
                             المستندات المطلوبة
                           </h2>
@@ -2843,7 +3468,7 @@ export default function App() {
       {
         activeView === "driver-pending" && (
           <div className="top-spacing max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-8 text-center">
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-8 text-center">
               <div className="text-5xl mb-4">✅</div>
               <h1 className="text-lg font-black text-slate-900 mb-2">
                 تم التسجيل بنجاح
@@ -2880,7 +3505,7 @@ export default function App() {
 
       {/* ─── MOBILE BOTTOM NAV ─── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-green-500/40 border-t border-green-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] h-12">
-        <div className="grid h-12 grid-cols-4">
+        <div className={`grid h-12 ${token ? 'grid-cols-6' : 'grid-cols-4'}`}>
           {[
             {
               id: "landing" as View,
@@ -2919,6 +3544,36 @@ export default function App() {
                     fill="currentColor"
                   >
                     <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                  </svg>
+                ),
+              },
+            ] : []),
+            ...(token && user?.role === 'driver' ? [
+              {
+                id: "driver" as View,
+                label: "المندوب",
+                icon: (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-5 h-5"
+                    fill="currentColor"
+                  >
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                  </svg>
+                ),
+              },
+            ] : []),
+            ...(token && user?.role !== 'driver' ? [
+              {
+                id: "my-orders" as View,
+                label: "طلباتي",
+                icon: (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-5 h-5"
+                    fill="currentColor"
+                  >
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
                   </svg>
                 ),
               },
@@ -2962,17 +3617,35 @@ export default function App() {
                 </svg>
               ),
             }] : []),
+            ...(token ? [{
+              id: "notifications" as View,
+              label: "الإشعارات",
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-5 h-5"
+                  fill="currentColor"
+                >
+                  <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
+                </svg>
+              ),
+              isNotification: true,
+            }] : []),
           ].map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveView(item.id)}
-              className={`flex flex-col items-center justify-center gap-1 relative transition-colors ${activeView === item.id ? "text-green-600" : "text-yellow-600"
+              className={`flex flex-col items-center justify-center relative transition-colors ${activeView === item.id ? "text-green-600" : "text-yellow-600"
                 }`}
             >
               {activeView === item.id && (
                 <span className="absolute top-0 inset-x-4 h-0.5 bg-green-500 rounded-full" />
               )}
-              {item.icon}
+              {"isNotification" in item && item.isNotification ? (
+                <NotificationBellMobile onViewNotifications={() => setActiveView("notifications")} />
+              ) : (
+                item.icon
+              )}
               <span className="text-[10px] font-semibold leading-none">
                 {item.label}
               </span>
@@ -2983,6 +3656,120 @@ export default function App() {
 
       {/* Spacer so content clears the bottom nav on mobile */}
       <div className="md:hidden h-12" />
+
+      {/* Recharge Popup */}
+      {showRechargePopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-black text-yellow-600">شحن الرصيد</h2>
+                <button
+                  onClick={() => setShowRechargePopup(false)}
+                  className="text-yellow-600 hover:text-yellow-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-500 mb-2">
+                رصيدك الحالي: <span className="font-bold text-lg text-yellow-600">{(driverProfile?.balance || 0).toFixed(2)} جنيه</span>
+              </p>
+
+              {/* Bank transfer recharge form */}
+              {!rechargeSuccess ? (
+                <div className="space-y-4">
+                  <div className="bg-green-500/5 rounded-xl p-4">
+                    <h3 className="font-black text-yellow-600 mb-2 text-sm">شحن عبر التحويل البنكي <span className="text-red-500 text-lg font-bold">(بنكك)</span></h3>
+                    <p className="text-xs text-gray-500 mb-3">
+                      أرسل المبلغ عبر تطبيق بنكك، ثم أدخل آخر 6 أرقام من عملية التحويل وقيمة المبلغ المرسل بالجنيه السوداني.
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">آخر 6 أرقام من عملية التحويل</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={rechargeForm.transactionLast6}
+                          onChange={(e) => {
+                            setRechargeForm({ ...rechargeForm, transactionLast6: e.target.value.replace(/\D/g, '').slice(0, 6) })
+                            if (rechargeErrors.transactionLast6) {
+                              setRechargeErrors({ ...rechargeErrors, transactionLast6: '' })
+                            }
+                          }}
+                          placeholder="مثال: 482913"
+                          className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 ${rechargeErrors.transactionLast6
+                            ? 'border-red-500 focus:ring-red-400'
+                            : 'border-slate-200 focus:ring-green-400'
+                            }`}
+                        />
+                        {rechargeErrors.transactionLast6 && (
+                          <p className="text-red-500 text-xs mt-1">{rechargeErrors.transactionLast6}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">قيمة المبلغ المرسل (جنيه سوداني)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={rechargeForm.amountSent}
+                          onChange={(e) => {
+                            setRechargeForm({ ...rechargeForm, amountSent: e.target.value })
+                            if (rechargeErrors.amountSent) {
+                              setRechargeErrors({ ...rechargeErrors, amountSent: '' })
+                            }
+                          }}
+                          placeholder="0.00"
+                          className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 ${rechargeErrors.amountSent
+                            ? 'border-red-500 focus:ring-red-400'
+                            : 'border-slate-200 focus:ring-green-400'
+                            }`}
+                        />
+                        {rechargeErrors.amountSent && (
+                          <p className="text-red-500 text-xs mt-1">{rechargeErrors.amountSent}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSubmitRecharge}
+                    disabled={submittingRecharge}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-2.5 rounded-xl transition-colors"
+                  >
+                    {submittingRecharge ? 'جاري الإرسال...' : 'إرسال طلب الشحن'}
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 mb-2">
+                    {rechargeSuccessMessage.includes('فشل') ? 'فشل طلب الشحن' : 'تم طلب الشحن'}
+                  </h3>
+                  <p className={`text-sm mb-6 ${rechargeSuccessMessage.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                    {rechargeSuccessMessage}
+                  </p>
+                  <button
+                    onClick={() => {
+                      handleResetRechargeForm()
+                      setShowRechargePopup(false)
+                    }}
+                    className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2.5 rounded-xl transition-colors"
+                  >
+                    إغلاق
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   )
 }

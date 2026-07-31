@@ -165,7 +165,7 @@ export default function ChatWidget({ token, user, currentOrder }: ChatWidgetProp
         <p className="text-slate-500 mt-1 text-sm">تواصل مع فريق الدعم أو مع المندوب أثناء التوصيل</p>
       </div>
 
-      <div className="bg-white border border-slate-100 rounded-lg shadow-sm overflow-hidden flex flex-col" style={{ height: "70vh" }}>
+      <div className="bg-white border border-slate-100 rounded-lg shadow-xs overflow-hidden flex flex-col" style={{ height: "70vh" }}>
         <div className="w-full border-b border-slate-400 bg-yellow-500/10 flex flex-col shrink-0">
           <div className="flex-1">
             {loadingList ? (

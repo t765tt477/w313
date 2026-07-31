@@ -72,7 +72,7 @@ export default function Profile({ user, onLogout }: ProfileProps) {
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Profile Card */}
         <div className="lg:col-span-1">
-          <div className="bg-white border border-slate-100 rounded-lg shadow-sm p-4 mb-4">
+          <div className="bg-white border border-slate-100 rounded-lg shadow-xs p-4 mb-4">
             <div className="flex flex-row gap-4">
               {user?.profileImage ? (
                 <img
@@ -110,7 +110,7 @@ export default function Profile({ user, onLogout }: ProfileProps) {
 
         {/* Account Details */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4">
             <h2 className="text-sm font-black text-slate-900 mb-6">الإعدادات</h2>
             <div className="space-y-3">
               <button
