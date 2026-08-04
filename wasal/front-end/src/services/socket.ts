@@ -19,12 +19,24 @@ export function getSocket(token: string): Socket {
     transports: ['websocket', 'polling'],
     // Render-specific reconnection settings
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: 15,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    timeout: 45000,
+    timeout: 60000,
     // Fallback to polling if WebSocket fails
-    forceNew: true
+    forceNew: false,
+    // Better error handling
+    tryUpgradeOnFailure: true,
+    upgradeTimeout: 30000
+  });
+
+  // Handle connection errors
+  socket.on('connect_error', (error) => {
+    console.error('Socket connection error:', error);
+    // Force fallback to polling on WebSocket error
+    if (socket.io.opts.transports.includes('websocket')) {
+      socket.io.opts.transports = ['polling'];
+    }
   });
 
   return socket;

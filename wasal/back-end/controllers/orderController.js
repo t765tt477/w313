@@ -98,8 +98,10 @@ export const getOrderById = async (req, res) => {
     }
 
     // Check if user owns the order or is the driver
-    if (order.client._id.toString() !== req.user.id &&
-      (!order.driver || order.driver._id.toString() !== req.user.id)) {
+    const isClient = order.client._id.toString() === req.user.id;
+    const isDriver = order.driver && order.driver._id.toString() === req.user.id;
+
+    if (!isClient && !isDriver) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 

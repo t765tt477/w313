@@ -32,7 +32,8 @@ export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
       origin: '*',
-      credentials: true
+      credentials: true,
+      methods: ['GET', 'POST']
     },
     // Render-specific WebSocket configuration
     pingTimeout: 60000, // 60 seconds
@@ -44,7 +45,12 @@ export const initSocket = (httpServer) => {
     // Better error handling for Render
     connectTimeout: 45000,
     // Handle Render's load balancer
-    path: '/socket.io/'
+    path: '/socket.io/',
+    // Add retry logic
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
   });
 
   io.use(async (socket, next) => {
