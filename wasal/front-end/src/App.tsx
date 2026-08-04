@@ -13,7 +13,7 @@ import { authAPI, orderAPI, driverAPI, cityAPI } from "./services/api"
 import { getSocket, disconnectSocket } from "./services/socket"
 import { playNotificationSound, playIncomingOrderSound } from "./utils/sound"
 
-type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat" | "driver-pending" | "driver-recharge" | "my-orders" | "notifications"
+type View = "landing" | "client" | "driver" | "about" | "profile" | "otp" | "chat" | "driver-pending" | "driver-recharge" | "my-orders" | "notifications" | "driver-tracking"
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>("landing")
@@ -284,6 +284,7 @@ export default function App() {
       setOrders((prev) => [res.data.order, ...prev])
       setIncomingOffer(null)
       setMessage('تم قبول الطلب، توجه لنقطة الاستلام')
+      setActiveView('driver-tracking')
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'تعذر قبول الطلب، ربما تم تحويله لمندوب آخر')
       setIncomingOffer(null)
@@ -2955,64 +2956,24 @@ export default function App() {
               </>
             ) : (
               <>
-                {/* Active order in progress - map + status controls */}
+                {/* Active order notification - simplified since full tracking is now on separate page */}
                 {currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status) && (
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4 mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-base font-black text-slate-900">
-                        طلب جارٍ #{currentOrder._id?.slice(-6)}
-                      </h2>
-                      <span className={`font-bold text-sm px-3 py-1 rounded-full ${currentOrder.status === 'accepted' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                        }`}>
-                        {currentOrder.status === 'accepted' ? 'في الطريق للاستلام' : 'تم الاستلام - جارٍ التوصيل'}
-                      </span>
-                    </div>
-
-                    {currentOrder.pickupLocation?.lat && currentOrder.deliveryLocation?.lat && (
-                      <div className="mb-4">
-                        <RouteMap
-                          pickup={currentOrder.pickupLocation}
-                          delivery={currentOrder.deliveryLocation}
-                          driverPosition={driverLivePosition}
-                          activeLeg={currentOrder.status === 'accepted' ? 'to_pickup' : 'to_delivery'}
-                          height="280px"
-                        />
-                      </div>
-                    )}
-
-                    <div className="grid sm:grid-cols-2 gap-3 text-sm mb-4">
-                      <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-                        <div className="font-semibold text-green-800 mb-0.5">📍 الاستلام</div>
-                        <div className="text-slate-600">{currentOrder.pickupLocation?.address}</div>
-                        <div className="text-slate-500 mt-1">{currentOrder.pickupLocation?.contactName} — {currentOrder.pickupLocation?.contactPhone}</div>
-                      </div>
-                      <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
-                        <div className="font-semibold text-yellow-800 mb-0.5">📍 التسليم</div>
-                        <div className="text-slate-600">{currentOrder.deliveryLocation?.address}</div>
-                        <div className="text-slate-500 mt-1">{currentOrder.deliveryLocation?.contactName} — {currentOrder.deliveryLocation?.contactPhone}</div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">📦</span>
+                      <div>
+                        <div className="font-black text-blue-800">لديك طلب جارٍ</div>
+                        <div className="text-sm text-blue-700">
+                          الطلب #{currentOrder._id?.slice(-6)} - {currentOrder.status === 'accepted' ? 'في الطريق للاستلام' : 'جارٍ التوصيل'}
+                        </div>
                       </div>
                     </div>
-
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      {currentOrder.status === 'accepted' && (
-                        <button
-                          onClick={() => handleUpdateDriverOrderStatus('picked_up')}
-                          disabled={isLoading(`driver-status-${currentOrder?._id}`)}
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
-                        >
-                          {isLoading(`driver-status-${currentOrder?._id}`) ? '...' : 'تم استلام الطرد'}
-                        </button>
-                      )}
-                      {currentOrder.status === 'picked_up' && (
-                        <button
-                          onClick={() => handleUpdateDriverOrderStatus('delivered')}
-                          disabled={isLoading(`driver-status-${currentOrder?._id}`)}
-                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
-                        >
-                          {isLoading(`driver-status-${currentOrder?._id}`) ? '...' : 'تم تسليم الطلب'}
-                        </button>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => setActiveView('driver-tracking')}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-sm transition-colors"
+                    >
+                      تتبع الطلب
+                    </button>
                   </div>
                 )}
 
@@ -3053,9 +3014,7 @@ export default function App() {
                           </h2>
                           <p className="text-sm text-slate-500 mt-1">
                             {isDriverAvailable
-                              ? (currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status)
-                                ? 'لديك طلب جارٍ حالياً'
-                                : 'أنت متاح الآن، بانتظار وصول طلب جديد...')
+                              ? 'أنت متاح الآن، بانتظار وصول طلب جديد...'
                               : 'أنت غير متاح، فعّل حالتك لبدء استقبال الطلبات'}
                           </p>
                         </div>
@@ -3555,6 +3514,94 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
+        )
+      }
+
+      {/* ─── DRIVER: ORDER TRACKING PAGE ─── */}
+      {
+        activeView === "driver-tracking" && currentOrder && (
+          <div className="top-spacing max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+            <div className="mb-6">
+              <button
+                onClick={() => setActiveView('driver')}
+                className="flex items-center gap-2 text-slate-600 hover:text-green-600 transition-colors mb-4"
+              >
+                <span>→</span>
+                <span className="font-semibold">العودة لتطبيق المندوب</span>
+              </button>
+              <h1 className="text-lg font-black text-slate-900">
+                تتبع الطلب #{currentOrder._id?.slice(-6)}
+              </h1>
+            </div>
+
+            {currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status) && (
+              <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-black text-slate-900">
+                    طلب جارٍ #{currentOrder._id?.slice(-6)}
+                  </h2>
+                  <span className={`font-bold text-sm px-3 py-1 rounded-full ${currentOrder.status === 'accepted' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                    }`}>
+                    {currentOrder.status === 'accepted' ? 'في الطريق للاستلام' : 'تم الاستلام - جارٍ التوصيل'}
+                  </span>
+                </div>
+
+                {currentOrder.pickupLocation?.lat && currentOrder.deliveryLocation?.lat && (
+                  <div className="mb-4">
+                    <RouteMap
+                      pickup={currentOrder.pickupLocation}
+                      delivery={currentOrder.deliveryLocation}
+                      driverPosition={driverLivePosition}
+                      activeLeg={currentOrder.status === 'accepted' ? 'to_pickup' : 'to_delivery'}
+                      height="350px"
+                    />
+                  </div>
+                )}
+
+                <div className="grid sm:grid-cols-2 gap-3 text-sm mb-4">
+                  <div className="bg-green-50 rounded-xl p-3 border border-green-100">
+                    <div className="font-semibold text-green-800 mb-0.5">📍 الاستلام</div>
+                    <div className="text-slate-600">{currentOrder.pickupLocation?.address}</div>
+                    <div className="text-slate-500 mt-1">{currentOrder.pickupLocation?.contactName} — {currentOrder.pickupLocation?.contactPhone}</div>
+                  </div>
+                  <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
+                    <div className="font-semibold text-yellow-800 mb-0.5">📍 التسليم</div>
+                    <div className="text-slate-600">{currentOrder.deliveryLocation?.address}</div>
+                    <div className="text-slate-500 mt-1">{currentOrder.deliveryLocation?.contactName} — {currentOrder.deliveryLocation?.contactPhone}</div>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {currentOrder.status === 'accepted' && (
+                    <button
+                      onClick={() => handleUpdateDriverOrderStatus('picked_up')}
+                      disabled={isLoading(`driver-status-${currentOrder?._id}`)}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
+                    >
+                      {isLoading(`driver-status-${currentOrder?._id}`) ? '...' : 'تم استلام الطرد'}
+                    </button>
+                  )}
+                  {currentOrder.status === 'picked_up' && (
+                    <button
+                      onClick={() => handleUpdateDriverOrderStatus('delivered')}
+                      disabled={isLoading(`driver-status-${currentOrder?._id}`)}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
+                    >
+                      {isLoading(`driver-status-${currentOrder?._id}`) ? '...' : 'تم تسليم الطلب'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {message && (
+              <div className={`bg-slate-50 border rounded-xl p-4 mb-4 ${message.includes('فشل') ? 'border-red-200' : 'border-green-200'}`}>
+                <div className={`text-sm font-semibold ${message.includes('فشل') ? 'text-red-600' : 'text-green-600'}`}>
+                  {message}
+                </div>
+              </div>
+            )}
           </div>
         )
       }
