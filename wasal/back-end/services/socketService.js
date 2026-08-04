@@ -33,7 +33,18 @@ export const initSocket = (httpServer) => {
     cors: {
       origin: '*',
       credentials: true
-    }
+    },
+    // Render-specific WebSocket configuration
+    pingTimeout: 60000, // 60 seconds
+    pingInterval: 25000, // 25 seconds
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e6, // 1MB
+    // Better error handling for Render
+    connectTimeout: 45000,
+    // Handle Render's load balancer
+    path: '/socket.io/'
   });
 
   io.use(async (socket, next) => {

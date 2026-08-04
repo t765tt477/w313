@@ -16,7 +16,15 @@ export function getSocket(token: string): Socket {
 
   socket = io(SOCKET_URL, {
     auth: { token },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    // Render-specific reconnection settings
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    timeout: 45000,
+    // Fallback to polling if WebSocket fails
+    forceNew: true
   });
 
   return socket;
