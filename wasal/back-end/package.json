@@ -20,7 +20,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
     "nodemailer": "^6.9.7",
-    "postmark": "^5.1.0",
+    "resend": "^6.18.1",
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
