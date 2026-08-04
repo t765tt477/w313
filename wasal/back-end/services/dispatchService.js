@@ -5,7 +5,7 @@ import { emitToUser, emitToRole } from './socketService.js';
 
 // How long a driver has to respond to an order offer before it is
 // automatically handed to the next-nearest driver.
-const OFFER_TIMEOUT_MS = Number(process.env.DISPATCH_OFFER_TIMEOUT_MS) || 2 * 60 * 1000;
+const OFFER_TIMEOUT_MS = Number(process.env.DISPATCH_OFFER_TIMEOUT_MS) || 1 * 60 * 1000;
 
 // orderId -> Node timeout handle, so we can cancel it if the driver
 // responds (accept/reject) before the timer fires.
@@ -130,7 +130,7 @@ export const dispatchOrder = async (orderId) => {
     match.driver._id, 'Driver',
     order.dispatchAttempts > 1 ? 'order_reassigned' : 'order_offer',
     'طلب توصيل جديد',
-    `طلب جديد على بعد ${(Math.round(match.distanceKm * 60) / 60)} كم من موقعك، لديك دقيقتان للرد.`,
+    `طلب جديد على بعد ${(Math.round(match.distanceKm * 60) / 60)} كم من موقعك، لديك دقيقة واحدة للرد.`,
     { orderId: order._id }
   );
 
@@ -181,7 +181,7 @@ const handleOfferTimeout = async (orderId, driverId) => {
   await notify(
     driverId, 'Driver', 'order_offer_expired',
     'انتهت مهلة الرد',
-    'انتهت مهلة الدقيقتين، تم تحويل الطلب إلى مندوب آخر.',
+    'انتهت مهلة الدقيقة، تم تحويل الطلب إلى مندوب آخر.',
     { orderId: order._id },
     false
   );
