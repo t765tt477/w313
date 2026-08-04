@@ -41,13 +41,13 @@ const SOCIAL_LINKS: SocialItem[] = [
 
 interface SocialLinksProps {
   /** "footer": real outbound links styled for the site footer. "auth": compact row for login/register forms. */
-  variant?: 'footer' | 'auth';
+  variant?: 'footer';
   /** Called (with the network name) when an "auth" button is used, since real social sign-in isn't wired up to the backend yet. */
   onAuthClick?: (name: string) => void;
 }
 
 export default function SocialLinks({ variant = 'footer', onAuthClick }: SocialLinksProps) {
-  if (variant === 'auth') {
+  if (variant === 'footer') {
     return (
       <div className="flex items-center justify-center gap-3">
         {SOCIAL_LINKS.map((s) => (
@@ -56,7 +56,7 @@ export default function SocialLinks({ variant = 'footer', onAuthClick }: SocialL
             type="button"
             title={`المتابعة عبر ${s.name}`}
             onClick={() => onAuthClick?.(s.name)}
-            className="w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:text-green-700 hover:border-green-300 hover:bg-green-50 transition-colors"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-yellow-500 hover:text-green-700 hover:border-green-300 hover:bg-green-50 transition-colors"
           >
             {s.icon}
           </button>
@@ -74,7 +74,7 @@ export default function SocialLinks({ variant = 'footer', onAuthClick }: SocialL
           target="_blank"
           rel="noopener noreferrer"
           title={s.name}
-          className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-yellow-400 hover:text-green-900 transition-colors"
+          className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-yellow-400 hover:text-green-900 transition-colors"
         >
           {s.icon}
         </a>

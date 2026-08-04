@@ -400,43 +400,39 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dashboard min-h-screen bg-slate-50 flex flex-row" dir="rtl">
-      <div>
-        <Sidebar
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-      </div>
+    <div className="dashboard min-h-screen bg-background flex flex-row" dir="rtl">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       {/* Main Content */}
       <div className="w-full overflow-auto">
         {/* Header */}
-        <header className="text-white border-b border-slate-200 sticky top-0 z-40">
-          <div className="max-w-7xl bg-yellow-500 mx-auto px-4 py-1">
+        <header className="wasal-gradient border-b border-brand-700/20 sticky top-0 z-40 shadow-md">
+          <div className="max-w-7xl mx-auto px-4 py-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 emp-name">
-                <div className="bg-green-500/20 rounded-full p-1">
-                  <div className="w-5 h-5 bg-white rounded-full flex items-center justify-center">
-                    <span className="text-green-600 font-bold text-sm">
-                      {currentUser?.name?.charAt(0) || 'A'}
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2 emp-name">
+                <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center shrink-0">
+                  <span className="text-brand-700 font-black text-sm">
+                    {currentUser?.name?.charAt(0) || 'A'}
+                  </span>
                 </div>
-                <div>
-                  <div className="text-white text-sm">
+                <div className="leading-tight">
+                  <div className="text-white text-sm font-bold">
                     {currentUser?.name || 'موظف'}
                   </div>
-                  <div className="text-white text-xs">
-                    {currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin' ? 'سوبر ادمن' : 'موظف'}
+                  <div className="text-white/80 text-xs">
+                    {currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin' ? 'سوبر مسؤول' : 'مسؤول'}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleRefresh}
-                  className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-colors"
+                  className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl transition-colors"
                   title="تحديث الصفحة"
                   disabled={refreshing}
                 >
@@ -449,45 +445,32 @@ export default function Dashboard() {
         </header>
 
         {/* Content */}
-        <div className="max-w-7xl mx-auto p-2.5">
+        <div className="max-w-7xl mx-auto p-4">
 
           {activeTab === 'overview' && analytics && (
             <div>
               {/* Stats Cards */}
-              <h1 className="text-2xl font-black text-green-800 mb-4">الإحصائيات</h1>
+              <h1 className="text-2xl font-black wasal-text-gradient mb-4">الإحصائيات</h1>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-2xl font-black text-green-600">{analytics.totalUsers}</div>
-                  <div className="text-slate-500 text-sm mt-1">إجمالي الزباين</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-2xl font-black text-green-600">{analytics.totalDrivers}</div>
-                  <div className="text-slate-500 text-sm mt-1">إجمالي المندوبين</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-2xl font-black text-green-600">{analytics.activeDrivers}</div>
-                  <div className="text-slate-500 text-sm mt-1">مندوب نشط</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-2xl font-black text-green-600">{analytics.totalOrders}</div>
-                  <div className="text-slate-500 text-sm mt-1">إجمالي الطلبات</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-2xl font-black text-green-600">{analytics.completedOrders}</div>
-                  <div className="text-slate-500 text-sm mt-1">طلبات مكتملة</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-2xl font-black text-green-600">{analytics.pendingOrders}</div>
-                  <div className="text-slate-500 text-sm mt-1">طلبات معلقة</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-xl font-black text-green-600">{analytics.totalRevenue.toFixed(2)} ج</div>
-                  <div className="text-slate-500 text-sm mt-1">إجمالي الإيرادات</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 flex flex-col items-center justify-center shadow-xs border border-slate-100">
-                  <div className="text-xl font-black text-green-600">{analytics.driverEarnings.toFixed(2)} ج</div>
-                  <div className="text-slate-500 text-sm mt-1">أرباح المندوبين</div>
-                </div>
+                {[
+                  { value: analytics.totalUsers, label: 'إجمالي الزباين' },
+                  { value: analytics.totalDrivers, label: 'إجمالي المندوبين' },
+                  { value: analytics.activeDrivers, label: 'مندوب نشط' },
+                  { value: analytics.totalOrders, label: 'إجمالي الطلبات' },
+                  { value: analytics.completedOrders, label: 'طلبات مكتملة' },
+                  { value: analytics.pendingOrders, label: 'طلبات معلقة' },
+                  { value: `${analytics.totalRevenue.toFixed(2)} ج`, label: 'إجمالي الإيرادات' },
+                  { value: `${analytics.driverEarnings.toFixed(2)} ج`, label: 'أرباح المندوبين' },
+                ].map((stat, i) => (
+                  <div
+                    key={i}
+                    className="relative bg-card rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm border border-border overflow-hidden hover:shadow-md transition-shadow"
+                  >
+                    <span className="absolute top-0 right-0 h-full w-1.5 wasal-gradient" />
+                    <div className="text-2xl font-black text-brand-600">{stat.value}</div>
+                    <div className="text-muted text-sm mt-1 text-center">{stat.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -495,9 +478,9 @@ export default function Dashboard() {
           {activeTab === 'drivers' && (
             <div className="space-y-6">
               {/* Drivers List */}
-              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
-                  <h3 className="text-lg font-black text-green-800 mb-4">قائمة المندوبين</h3>
+                  <h3 className="text-lg font-black wasal-text-gradient mb-4">قائمة المندوبين</h3>
 
                   {/* Search and Filters */}
                   <div className="flex flex-col md:flex-row gap-4">
@@ -617,7 +600,7 @@ export default function Dashboard() {
 
           {activeTab === 'orders' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة الطلبات</h3>
 
@@ -716,7 +699,7 @@ export default function Dashboard() {
 
           {activeTab === 'users' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة الزباين</h3>
 
@@ -890,7 +873,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">قائمة الموظفين</h3>
                 </div>
@@ -1027,7 +1010,7 @@ export default function Dashboard() {
 
           {activeTab === 'logs' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-sm shadow-xs border border-slate-100 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                   <h3 className="text-lg font-black text-green-800 mb-4">سجلات النظام</h3>
 

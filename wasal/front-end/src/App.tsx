@@ -8,6 +8,7 @@ import LocationPicker from "./components/LocationPicker"
 import RouteMap from "./components/RouteMap"
 import NotificationBell from "./components/NotificationBell"
 import NotificationBellMobile from "./components/NotificationBellMobile"
+import SocialLinks from "./components/SocialLinks"
 import { authAPI, orderAPI, driverAPI, cityAPI } from "./services/api"
 import { getSocket, disconnectSocket } from "./services/socket"
 import { playNotificationSound, playIncomingOrderSound } from "./utils/sound"
@@ -35,6 +36,10 @@ export default function App() {
 
   // Driver state
   const [driverProfile, setDriverProfile] = useState<any>(null)
+  // True while we're fetching an existing driver's profile after login/refresh.
+  // Prevents the "new driver registration" form from flashing on screen for
+  // an already-registered driver before their profile data has arrived.
+  const [driverProfileLoading, setDriverProfileLoading] = useState<boolean>(!!token)
   const [driverEarnings, setDriverEarnings] = useState<any[]>([])
   const [isDriverAvailable, setIsDriverAvailable] = useState(true)
   const [rechargeForm, setRechargeForm] = useState({ transactionLast6: '', amountSent: '' })
@@ -87,8 +92,21 @@ export default function App() {
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [cities, setCities] = useState<{ _id: string; name: string }[]>([])
   const [orderForm, setOrderForm] = useState({ weight: 3, size: '1' })
-  const [loading, setLoading] = useState(false)
+  // Which specific action is currently in flight (e.g. "login", "reorder-<id>").
+  // Using a key instead of one shared boolean means clicking "reorder" on one
+  // order no longer makes every other button on the page (login, cancel on a
+  // different order, etc.) show its own "loading" text at the same time.
+  const [loadingAction, setLoadingAction] = useState<string | null>(null)
+  const isLoading = (key: string) => loadingAction === key
   const [message, setMessage] = useState('')
+
+  // Auto-dismiss any success/error banner a few seconds after it appears,
+  // so it doesn't linger on screen (across screens/actions) until a reload.
+  useEffect(() => {
+    if (!message) return
+    const t = setTimeout(() => setMessage(''), 4000)
+    return () => clearTimeout(t)
+  }, [message])
 
   // Load data on mount
   useEffect(() => {
@@ -313,6 +331,7 @@ export default function App() {
       setUser(userRes.data.user)
 
       if (userRes.data.user.role === 'client') {
+        setDriverProfileLoading(false)
         const ordersRes = await orderAPI.getUserOrders()
         setOrders(ordersRes.data.orders || [])
         if (ordersRes.data.orders.length > 0) {
@@ -321,9 +340,15 @@ export default function App() {
       }
 
       if (userRes.data.user.role === 'driver') {
-        const driverRes = await driverAPI.getProfile()
-        setDriverProfile(driverRes.data.driver)
-        setIsDriverAvailable(driverRes.data.driver.isAvailable)
+        try {
+          const driverRes = await driverAPI.getProfile()
+          setDriverProfile(driverRes.data.driver)
+          setIsDriverAvailable(driverRes.data.driver.isAvailable)
+        } finally {
+          // Whether the fetch succeeded or failed, we now know whether this
+          // driver already has a profile - safe to stop showing the loader.
+          setDriverProfileLoading(false)
+        }
 
         // Load earnings data
         try {
@@ -349,6 +374,7 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error loading user data:', error)
+      setDriverProfileLoading(false)
     }
   }
 
@@ -360,7 +386,7 @@ export default function App() {
     setLoginErrors(errors)
     if (errors.email || errors.password) return
 
-    setLoading(true)
+    setLoadingAction('login')
     try {
       const res = await authAPI.login(loginForm.email, loginForm.password)
       setToken(res.data.token)
@@ -369,6 +395,7 @@ export default function App() {
 
       // Redirect based on user role
       if (res.data.user.role === 'driver') {
+        setDriverProfileLoading(true)
         setActiveView('driver')
       } else {
         setActiveView('client')
@@ -376,7 +403,7 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل تسجيل الدخول')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleRegister = async () => {
@@ -392,7 +419,7 @@ export default function App() {
     setRegisterErrors(errors)
     if (Object.values(errors).some(e => e)) return
 
-    setLoading(true)
+    setLoadingAction('register')
     try {
       const { confirmPassword, ...payload } = registerForm
       console.log('Attempting registration with:', payload)
@@ -410,11 +437,11 @@ export default function App() {
       console.error('Error response:', error.response?.data)
       setMessage(error.response?.data?.message || 'فشل إنشاء الحساب')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleVerifyOTP = async () => {
-    setLoading(true)
+    setLoadingAction('verify-otp')
     try {
       const res = await authAPI.verifyOTP({
         userId: pendingUserId,
@@ -436,11 +463,11 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل التحقق من OTP')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleResendOTP = async () => {
-    setLoading(true)
+    setLoadingAction('resend-otp')
     try {
       const res = await authAPI.resendOTP({
         userId: pendingUserId,
@@ -450,7 +477,7 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إعادة إرسال الرمز')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   // Order handlers
@@ -463,7 +490,7 @@ export default function App() {
       setMessage('يرجى تحديد مواقع الاستلام والتسليم')
       return
     }
-    setLoading(true)
+    setLoadingAction('create-order')
     try {
       const distance = calculateDistance(pickupLocation, deliveryLocation)
       const res = await orderAPI.createOrder({
@@ -494,7 +521,7 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إنشاء الطلب')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const calculateDistance = (loc1: any, loc2: any) => {
@@ -548,7 +575,7 @@ export default function App() {
 
   const handleCancelOrder = async () => {
     if (!currentOrder) return
-    setLoading(true)
+    setLoadingAction(`cancel-order-${currentOrder?._id}`)
     try {
       const res = await orderAPI.cancelOrder(currentOrder._id, { reason: 'client' })
       setCurrentOrder(res.data.order)
@@ -557,12 +584,12 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'تعذر إلغاء الطلب')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleReorder = async (order: any) => {
     if (!order) return
-    setLoading(true)
+    setLoadingAction(`reorder-${order?._id}`)
     try {
       const distance = calculateDistance(
         { lat: order.pickupLocation.lat, lng: order.pickupLocation.lng },
@@ -584,7 +611,7 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إعادة الطلب')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const loadClientOrders = async () => {
@@ -629,7 +656,7 @@ export default function App() {
       setMessage('يجب الموافقة على شروط وسياسات التسجيل قبل إرسال الطلب')
       return
     }
-    setLoading(true)
+    setLoadingAction('driver-register')
     try {
       const { confirmPassword, ...payload } = driverForm
       console.log('Sending driver registration data:', { ...payload, role: 'driver' })
@@ -645,7 +672,7 @@ export default function App() {
       console.error('Driver registration error:', error.response?.data)
       setMessage(error.response?.data?.message || 'فشل إرسال الطلب')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleToggleAvailability = async () => {
@@ -715,7 +742,7 @@ export default function App() {
 
   const handleUpdateDriverOrderStatus = async (status: 'picked_up' | 'delivered') => {
     if (!currentOrder) return
-    setLoading(true)
+    setLoadingAction(`driver-status-${currentOrder?._id}`)
     try {
       const res = await driverAPI.updateOrderStatus(currentOrder._id, status)
       setCurrentOrder(res.data.order)
@@ -731,7 +758,7 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'تعذر تحديث حالة الطلب')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
 
@@ -755,24 +782,24 @@ export default function App() {
     setForgotPasswordErrors(errors)
     if (errors.email) return
 
-    setLoading(true)
+    setLoadingAction('forgot-password')
     try {
       await authAPI.forgotPassword(forgotPasswordForm.email)
       setForgotPasswordStep('otp')
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إرسال رمز التحقق')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleResendForgotPasswordOTP = async () => {
-    setLoading(true)
+    setLoadingAction('resend-forgot-password-otp')
     try {
       await authAPI.forgotPassword(forgotPasswordForm.email)
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل إعادة إرسال الرمز')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   const handleResetPassword = async () => {
@@ -783,7 +810,7 @@ export default function App() {
     setForgotPasswordErrors(errors)
     if (errors.otp || errors.newPassword) return
 
-    setLoading(true)
+    setLoadingAction('reset-password')
     try {
       const res = await authAPI.resetPassword({
         email: forgotPasswordForm.email,
@@ -796,7 +823,7 @@ export default function App() {
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'فشل تغيير كلمة المرور')
     }
-    setLoading(false)
+    setLoadingAction(null)
   }
 
   return (
@@ -908,14 +935,14 @@ export default function App() {
               <button
                 onClick={handleRejectOffer}
                 disabled={offerLoading}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
               >
                 رفض
               </button>
               <button
                 onClick={handleAcceptOffer}
                 disabled={offerLoading}
-                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
               >
                 {offerLoading ? '...' : 'قبول الطلب'}
               </button>
@@ -941,7 +968,7 @@ export default function App() {
             <div className="absolute top-0 left-0 w-80 h-80 bg-yellow-400 opacity-10 rounded-full -translate-x-40 -translate-y-20 blur-3xl" />
             <div className="absolute bottom-0 right-0 w-96 h-96 bg-green-300 opacity-20 rounded-full translate-x-32 translate-y-20 blur-3xl" />
 
-            <div className="first-page top-spacing relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="first-page top-spacing relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
               <div className="grid lg:grid-cols-2 gap-12 items-center">
                 <div>
                   <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm text-white text-sm font-semibold px-4 py-2 rounded-full mb-6 border border-white/20">
@@ -960,13 +987,13 @@ export default function App() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => setActiveView("client")}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-7.5 py-3 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
+                      className="bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold px-7.5 py-2.5 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 text-base"
                     >
                       أرسل طلبًا الآن
                     </button>
                     <button
                       onClick={() => setActiveView("driver")}
-                      className="bg-white/15 backdrop-blur-sm hover:bg-white/25 text-white font-semibold px-8 py-3 rounded-2xl border border-white/30 transition-all text-base"
+                      className="bg-white/15 backdrop-blur-sm hover:bg-white/25 text-white font-semibold px-8 py-2.5 rounded-2xl border border-white/30 transition-all text-base"
                     >
                       انضم كمندوب
                     </button>
@@ -1350,7 +1377,7 @@ export default function App() {
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
-                    className={`px-6 py-2 md:py-3 rounded-lg text-sm font-semibold transition-all ${activeTab === t
+                    className={`px-6 py-2 md:py-2.5 rounded-lg text-sm font-semibold transition-all ${activeTab === t
                       ? "bg-white shadow text-green-700"
                       : "text-slate-500"
                       }`}
@@ -1381,7 +1408,7 @@ export default function App() {
                             value={loginForm.email}
                             onChange={(e) => { setLoginForm({ ...loginForm, email: e.target.value }); setLoginErrors({ ...loginErrors, email: '' }) }}
                             required
-                            className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${loginErrors.email ? 'border-red-500' : 'border-slate-200'}`}
+                            className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${loginErrors.email ? 'border-red-500' : 'border-slate-200'}`}
                           />
                           {loginErrors.email && <p className="text-red-500 text-xs mt-1">{loginErrors.email}</p>}
                         </div>
@@ -1398,7 +1425,7 @@ export default function App() {
                               value={loginForm.password}
                               onChange={(e) => { setLoginForm({ ...loginForm, password: e.target.value }); setLoginErrors({ ...loginErrors, password: '' }) }}
                               required
-                              className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${loginErrors.password ? 'border-red-500' : 'border-slate-200'}`}
+                              className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${loginErrors.password ? 'border-red-500' : 'border-slate-200'}`}
                             />
                             <button
                               type="button"
@@ -1417,10 +1444,10 @@ export default function App() {
                         )}
                         <button
                           onClick={handleLogin}
-                          disabled={loading}
-                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                          disabled={isLoading('login')}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
                         >
-                          {loading ? 'جاري الدخول...' : 'دخول'}
+                          {isLoading('login') ? 'جاري الدخول...' : 'دخول'}
                         </button>
                         <button
                           onClick={() => setActiveTab("register")}
@@ -1456,7 +1483,7 @@ export default function App() {
                                 value={forgotPasswordForm.email}
                                 onChange={(e) => { setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value }); setForgotPasswordErrors({ ...forgotPasswordErrors, email: '' }) }}
                                 required
-                                className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${forgotPasswordErrors.email ? 'border-red-500' : 'border-slate-200'}`}
+                                className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${forgotPasswordErrors.email ? 'border-red-500' : 'border-slate-200'}`}
                               />
                               {forgotPasswordErrors.email && <p className="text-red-500 text-xs mt-1">{forgotPasswordErrors.email}</p>}
                             </div>
@@ -1467,10 +1494,10 @@ export default function App() {
                             )}
                             <button
                               onClick={handleForgotPassword}
-                              disabled={loading}
-                              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                              disabled={isLoading('forgot-password')}
+                              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
                             >
-                              {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
+                              {isLoading('forgot-password') ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
                             </button>
                             <button
                               onClick={() => setActiveTab('login')}
@@ -1494,7 +1521,7 @@ export default function App() {
                                 value={forgotPasswordForm.otp}
                                 onChange={(e) => { setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value }); setForgotPasswordErrors({ ...forgotPasswordErrors, otp: '' }) }}
                                 required
-                                className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest ${forgotPasswordErrors.otp ? 'border-red-500' : 'border-slate-200'}`}
+                                className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-center text-2xl tracking-widest ${forgotPasswordErrors.otp ? 'border-red-500' : 'border-slate-200'}`}
                                 maxLength={6}
                               />
                               {forgotPasswordErrors.otp && <p className="text-red-500 text-xs mt-1">{forgotPasswordErrors.otp}</p>}
@@ -1513,7 +1540,7 @@ export default function App() {
                                   onChange={(e) => { setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value }); setForgotPasswordErrors({ ...forgotPasswordErrors, newPassword: '' }) }}
                                   required
                                   minLength={6}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${forgotPasswordErrors.newPassword ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${forgotPasswordErrors.newPassword ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 <button
                                   type="button"
@@ -1532,17 +1559,17 @@ export default function App() {
                             )}
                             <button
                               onClick={handleResetPassword}
-                              disabled={loading}
-                              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                              disabled={isLoading('reset-password')}
+                              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
                             >
-                              {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
+                              {isLoading('reset-password') ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
                             </button>
                             <button
                               onClick={handleResendForgotPasswordOTP}
-                              disabled={loading}
-                              className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                              disabled={isLoading('resend-forgot-password-otp')}
+                              className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
                             >
-                              {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
+                              {isLoading('resend-forgot-password-otp') ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
                             </button>
                             <button
                               onClick={() => setForgotPasswordStep('email')}
@@ -1606,7 +1633,7 @@ export default function App() {
                                   onChange={(e) => { setRegisterForm({ ...registerForm, [f.key]: e.target.value }); setRegisterErrors({ ...registerErrors, [f.key]: '' }) }}
                                   required
                                   minLength={6}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${registerErrors[f.key as keyof typeof registerErrors] ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${registerErrors[f.key as keyof typeof registerErrors] ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 <button
                                   type="button"
@@ -1625,7 +1652,7 @@ export default function App() {
                                 value={registerForm[f.key as keyof typeof registerForm]}
                                 onChange={(e) => { setRegisterForm({ ...registerForm, [f.key]: e.target.value }); setRegisterErrors({ ...registerErrors, [f.key]: '' }) }}
                                 required
-                                className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${registerErrors[f.key as keyof typeof registerErrors] ? 'border-red-500' : 'border-slate-200'}`}
+                                className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${registerErrors[f.key as keyof typeof registerErrors] ? 'border-red-500' : 'border-slate-200'}`}
                               />
                             )}
                             {registerErrors[f.key as keyof typeof registerErrors] && <p className="text-red-500 text-xs mt-1">{registerErrors[f.key as keyof typeof registerErrors]}</p>}
@@ -1641,7 +1668,7 @@ export default function App() {
                             value={registerForm.city}
                             onChange={(e) => { setRegisterForm({ ...registerForm, city: e.target.value }); setRegisterErrors({ ...registerErrors, city: '' }) }}
                             required
-                            className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${registerErrors.city ? 'border-red-500' : 'border-slate-200'}`}
+                            className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${registerErrors.city ? 'border-red-500' : 'border-slate-200'}`}
                           >
                             <option value="">اختر مدينتك</option>
                             {cities.map((c) => (
@@ -1660,10 +1687,10 @@ export default function App() {
                         )}
                         <button
                           onClick={handleRegister}
-                          disabled={loading}
-                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50"
+                          disabled={isLoading('register')}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
                         >
-                          {loading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
+                          {isLoading('register') ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
                         </button>
                       </div>
                     </>
@@ -1724,7 +1751,7 @@ export default function App() {
                         onChange={(e) => setOrderForm({ ...orderForm, weight: Number(e.target.value) })}
                         required
                         min="1"
-                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
                       />
                     </div>
                     <div>
@@ -1737,7 +1764,7 @@ export default function App() {
                         value={orderForm.size}
                         onChange={(e) => setOrderForm({ ...orderForm, size: e.target.value })}
                         required
-                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right bg-white"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right bg-white"
                       >
                         <option value="1">صغير (1)</option>
                         <option value="2">متوسط (2)</option>
@@ -1773,10 +1800,10 @@ export default function App() {
                   <div className="mt-4 grid sm:grid-cols-2 gap-3 px-4">
                     <button
                       onClick={handleCreateOrder}
-                      disabled={loading}
+                      disabled={isLoading('create-order')}
                       className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                     >
-                      {loading ? 'جاري إنشاء الطلب...' : 'إنشاء الطلب'}
+                      {isLoading('create-order') ? 'جاري إنشاء الطلب...' : 'إنشاء الطلب'}
                     </button>
                     <span className="text-sm text-slate-500">الدفع <span className="font-bold text-blue-600">كاش</span> او <span className="font-bold text-red-600">بنكك</span></span>
                   </div>
@@ -1787,10 +1814,10 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Order tracking */}
+                {/* Order tracking — same card style as the driver's "طلب جارٍ" tracking page */}
                 {currentOrder && (
-                  <div className="bg-white px-4">
-                    <div className="flex items-center justify-between mb-5">
+                  <div className="bg-white p-3 mb-6">
+                    <div className="flex items-center justify-between mb-4">
                       <h2 className="text-base font-black text-slate-900">
                         تتبع الطلب #{currentOrder._id?.slice(-6) || '---'}
                       </h2>
@@ -1831,13 +1858,22 @@ export default function App() {
                     </div>
                     {/* Cancel button for pending orders */}
                     {currentOrder.status === 'pending' && (
-                      <div className="mb-4">
+                      <div className="mb-4 flex flex-row justify-evenly">
                         <button
                           onClick={handleCancelOrder}
-                          disabled={loading}
+                          disabled={isLoading(`cancel-order-${currentOrder?._id}`)}
                           className="w-fit bg-red-100 hover:bg-red-200 text-red-700 font-bold px-6 py-2 rounded-xl transition-colors disabled:opacity-50 text-sm"
                         >
-                          {loading ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                          {isLoading(`cancel-order-${currentOrder?._id}`) ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedOrderForTracking(currentOrder)
+                            setActiveView('my-orders')
+                          }}
+                          className="w-fit bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold px-6 py-2 rounded-xl transition-colors disabled:opacity-50 text-sm"
+                        >
+                          تتبع الطلب
                         </button>
                       </div>
                     )}
@@ -1849,10 +1885,11 @@ export default function App() {
                           عذراً، لم يتم العثور على مندوب متاح في الوقت المحدد. يرجى الانتظار قليلاً ثم إعادة إنشاء الطلب.
                         </div>
                         <button
-                          onClick={handleReorder}
-                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm"
+                          onClick={() => handleReorder(currentOrder)}
+                          disabled={isLoading(`reorder-${currentOrder?._id}`)}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm disabled:opacity-50"
                         >
-                          إعادة الطلب
+                          {isLoading(`reorder-${currentOrder?._id}`) ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
                         </button>
                       </div>
                     )}
@@ -1865,10 +1902,10 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => handleReorder(currentOrder)}
-                          disabled={loading}
+                          disabled={isLoading(`reorder-${currentOrder?._id}`)}
                           className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm disabled:opacity-50"
                         >
-                          {loading ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
+                          {isLoading(`reorder-${currentOrder?._id}`) ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
                         </button>
                       </div>
                     )}
@@ -1891,7 +1928,7 @@ export default function App() {
                               {s.done ? "✓" : i + 1}
                             </div>
                             <span
-                              className={`text-xs font-semibold ${s.done ? "text-green-600" : "text-slate-400"
+                              className={`text-[8px] font-semibold ${s.done ? "text-green-600" : "text-slate-400"
                                 }`}
                             >
                               {s.label}
@@ -1913,10 +1950,22 @@ export default function App() {
                           pickup={currentOrder.pickupLocation}
                           delivery={currentOrder.deliveryLocation}
                           driverPosition={trackedDriverPosition || currentOrder.driver?.currentLocation || null}
+                          activeLeg={currentOrder.status === 'accepted' ? 'to_pickup' : 'to_delivery'}
                           height="260px"
                         />
                       </div>
                     )}
+                    {/* Pickup / delivery info — same grid style as the driver card */}
+                    <div className="grid sm:grid-cols-2 gap-3 text-sm mb-4">
+                      <div className="bg-green-50 rounded-xl p-3 border border-green-100">
+                        <div className="font-semibold text-green-800 mb-0.5">📍 الاستلام</div>
+                        <div className="text-slate-600">{currentOrder.pickupLocation?.address || '---'}</div>
+                      </div>
+                      <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
+                        <div className="font-semibold text-yellow-800 mb-0.5">📍 التسليم</div>
+                        <div className="text-slate-600">{currentOrder.deliveryLocation?.address || '---'}</div>
+                      </div>
+                    </div>
                     {/* Driver info */}
                     {currentOrder.driver && (
                       <div className="flex items-center gap-4 bg-slate-50 rounded-2xl p-4">
@@ -2021,7 +2070,7 @@ export default function App() {
                   <p className="text-slate-500 mb-4">ابدأ بإنشاء طلب توصيل جديد</p>
                   <button
                     onClick={() => setActiveView('client')}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-2.5 rounded-xl transition-colors"
                   >
                     إنشاء طلب جديد
                   </button>
@@ -2096,17 +2145,17 @@ export default function App() {
                           {order.status === 'cancelled' && (
                             <button
                               onClick={() => handleReorder(order)}
-                              disabled={loading}
+                              disabled={isLoading(`reorder-${order._id}`)}
                               className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-xl transition-colors text-sm disabled:opacity-50"
                             >
-                              {loading ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
+                              {isLoading(`reorder-${order._id}`) ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
                             </button>
                           )}
                           {order.status === 'pending' && (
                             <button
                               onClick={async () => {
                                 if (!confirm('هل أنت متأكد من إلغاء هذا الطلب؟')) return
-                                setLoading(true)
+                                setLoadingAction(`cancel-order-${order._id}`)
                                 try {
                                   const res = await orderAPI.cancelOrder(order._id, { reason: 'client' })
                                   setOrders((prev) => prev.map((o) => o._id === res.data.order._id ? res.data.order : o))
@@ -2114,12 +2163,12 @@ export default function App() {
                                 } catch (error: any) {
                                   setMessage(error.response?.data?.message || 'تعذر إلغاء الطلب')
                                 }
-                                setLoading(false)
+                                setLoadingAction(null)
                               }}
-                              disabled={loading}
+                              disabled={isLoading(`cancel-order-${order._id}`)}
                               className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-xl transition-colors text-sm disabled:opacity-50"
                             >
-                              {loading ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                              {isLoading(`cancel-order-${order._id}`) ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
                             </button>
                           )}
                         </div>
@@ -2138,6 +2187,7 @@ export default function App() {
                   pickup={selectedOrderForTracking.pickupLocation}
                   delivery={selectedOrderForTracking.deliveryLocation}
                   driverPosition={trackedDriverPosition}
+                  activeLeg={selectedOrderForTracking.status === 'accepted' ? 'to_pickup' : 'to_delivery'}
                   height="100vh"
                 />
               </div>
@@ -2212,7 +2262,7 @@ export default function App() {
                     <button
                       onClick={async () => {
                         if (!confirm('هل أنت متأكد من إلغاء هذا الطلب؟')) return
-                        setLoading(true)
+                        setLoadingAction(`cancel-order-${selectedOrderForTracking._id}`)
                         try {
                           const res = await orderAPI.cancelOrder(selectedOrderForTracking._id, { reason: 'client' })
                           setOrders((prev) => prev.map((o) => o._id === res.data.order._id ? res.data.order : o))
@@ -2221,21 +2271,21 @@ export default function App() {
                         } catch (error: any) {
                           setMessage(error.response?.data?.message || 'تعذر إلغاء الطلب')
                         }
-                        setLoading(false)
+                        setLoadingAction(null)
                       }}
-                      disabled={loading}
+                      disabled={isLoading(`cancel-order-${selectedOrderForTracking._id}`)}
                       className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold p-1.5 rounded-xl transition-colors text-sm disabled:opacity-50 shadow-lg"
                     >
-                      {loading ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+                      {isLoading(`cancel-order-${selectedOrderForTracking._id}`) ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
                     </button>
                   )}
                   {selectedOrderForTracking.status === 'cancelled' && (
                     <button
                       onClick={() => handleReorder(selectedOrderForTracking)}
-                      disabled={loading}
+                      disabled={isLoading(`reorder-${selectedOrderForTracking._id}`)}
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold p-1.5 rounded-xl transition-colors text-sm disabled:opacity-50 shadow-lg"
                     >
-                      {loading ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
+                      {isLoading(`reorder-${selectedOrderForTracking._id}`) ? 'جاري إعادة الطلب...' : 'إعادة الطلب'}
                     </button>
                   )}
                   <button
@@ -2275,13 +2325,13 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <button
                     onClick={handleLogout}
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl transition-colors"
                   >
                     تسجيل الخروج
                   </button>
                   <button
                     onClick={() => setActiveView('client')}
-                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-3 rounded-xl transition-colors"
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-2.5 rounded-xl transition-colors"
                   >
                     الانتقال لتطبيق الزبون
                   </button>
@@ -2324,7 +2374,7 @@ export default function App() {
                           value={loginForm.email}
                           onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                           required
-                          className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right"
                         />
                       </div>
                       <div>
@@ -2340,7 +2390,7 @@ export default function App() {
                             value={loginForm.password}
                             onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                             required
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2 md:py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all"
                           />
                           <button
                             type="button"
@@ -2358,10 +2408,10 @@ export default function App() {
                       )}
                       <button
                         onClick={handleLogin}
-                        disabled={loading}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 md:py-3 rounded-xl transition-colors disabled:opacity-50"
+                        disabled={isLoading('login')}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 md:py-2.5 rounded-xl transition-colors disabled:opacity-50"
                       >
-                        {loading ? 'جاري الدخول...' : 'دخول'}
+                        {isLoading('login') ? 'جاري الدخول...' : 'دخول'}
                       </button>
                       <button
                         onClick={() => setActiveTab("register")}
@@ -2407,10 +2457,10 @@ export default function App() {
                           )}
                           <button
                             onClick={handleForgotPassword}
-                            disabled={loading}
+                            disabled={isLoading('forgot-password')}
                             className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                           >
-                            {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
+                            {isLoading('forgot-password') ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
                           </button>
                           <button
                             onClick={() => setActiveTab('login')}
@@ -2470,17 +2520,17 @@ export default function App() {
                           )}
                           <button
                             onClick={handleResetPassword}
-                            disabled={loading}
+                            disabled={isLoading('reset-password')}
                             className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                           >
-                            {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
+                            {isLoading('reset-password') ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
                           </button>
                           <button
                             onClick={handleResendForgotPasswordOTP}
-                            disabled={loading}
+                            disabled={isLoading('resend-forgot-password-otp')}
                             className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                           >
-                            {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
+                            {isLoading('resend-forgot-password-otp') ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
                           </button>
                           <button
                             onClick={() => setForgotPasswordStep('email')}
@@ -2513,7 +2563,7 @@ export default function App() {
                                   placeholder="الاسم الكامل"
                                   value={driverForm.name}
                                   onChange={(e) => { setDriverForm({ ...driverForm, name: e.target.value }); setDriverErrors({ ...driverErrors, name: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.name ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.name ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.name && <p className="text-red-500 text-xs mt-1">{driverErrors.name}</p>}
                               </div>
@@ -2526,7 +2576,7 @@ export default function App() {
                                   placeholder="09XXXXXXXX"
                                   value={driverForm.phone}
                                   onChange={(e) => { setDriverForm({ ...driverForm, phone: e.target.value }); setDriverErrors({ ...driverErrors, phone: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.phone ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.phone ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.phone && <p className="text-red-500 text-xs mt-1">{driverErrors.phone}</p>}
                               </div>
@@ -2539,7 +2589,7 @@ export default function App() {
                                   placeholder="name@email.com"
                                   value={driverForm.email}
                                   onChange={(e) => { setDriverForm({ ...driverForm, email: e.target.value }); setDriverErrors({ ...driverErrors, email: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.email ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.email ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.email && <p className="text-red-500 text-xs mt-1">{driverErrors.email}</p>}
                               </div>
@@ -2552,7 +2602,7 @@ export default function App() {
                                   placeholder="رقم الهوية"
                                   value={driverForm.nationalId}
                                   onChange={(e) => { setDriverForm({ ...driverForm, nationalId: e.target.value }); setDriverErrors({ ...driverErrors, nationalId: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.nationalId ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.nationalId ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.nationalId && <p className="text-red-500 text-xs mt-1">{driverErrors.nationalId}</p>}
                               </div>
@@ -2564,7 +2614,7 @@ export default function App() {
                                   type="date"
                                   value={driverForm.birthDate}
                                   onChange={(e) => { setDriverForm({ ...driverForm, birthDate: e.target.value }); setDriverErrors({ ...driverErrors, birthDate: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.birthDate ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.birthDate ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.birthDate && <p className="text-red-500 text-xs mt-1">{driverErrors.birthDate}</p>}
                               </div>
@@ -2575,7 +2625,7 @@ export default function App() {
                                 <select
                                   value={driverForm.city}
                                   onChange={(e) => { setDriverForm({ ...driverForm, city: e.target.value }); setDriverErrors({ ...driverErrors, city: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${driverErrors.city ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${driverErrors.city ? 'border-red-500' : 'border-slate-200'}`}
                                 >
                                   <option value="">اختر مدينتك</option>
                                   {cities.map((c) => (
@@ -2594,7 +2644,7 @@ export default function App() {
                                     placeholder="••••••••"
                                     value={driverForm.password}
                                     onChange={(e) => { setDriverForm({ ...driverForm, password: e.target.value }); setDriverErrors({ ...driverErrors, password: '' }) }}
-                                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${driverErrors.password ? 'border-red-500' : 'border-slate-200'}`}
+                                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${driverErrors.password ? 'border-red-500' : 'border-slate-200'}`}
                                   />
                                   <button
                                     type="button"
@@ -2616,7 +2666,7 @@ export default function App() {
                                     placeholder="••••••••"
                                     value={driverForm.confirmPassword}
                                     onChange={(e) => { setDriverForm({ ...driverForm, confirmPassword: e.target.value }); setDriverErrors({ ...driverErrors, confirmPassword: '' }) }}
-                                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${driverErrors.confirmPassword ? 'border-red-500' : 'border-slate-200'}`}
+                                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all ${driverErrors.confirmPassword ? 'border-red-500' : 'border-slate-200'}`}
                                   />
                                   <button
                                     type="button"
@@ -2677,7 +2727,7 @@ export default function App() {
                                 <select
                                   value={driverForm.vehicleType}
                                   onChange={(e) => { setDriverForm({ ...driverForm, vehicleType: e.target.value }); setDriverErrors({ ...driverErrors, vehicleType: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${driverErrors.vehicleType ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right ${driverErrors.vehicleType ? 'border-red-500' : 'border-slate-200'}`}
                                 >
                                   <option value="motorcycle">دراجة نارية</option>
                                   <option value="car">سيارة</option>
@@ -2694,7 +2744,7 @@ export default function App() {
                                   placeholder="رقم اللوحة"
                                   value={driverForm.plateNumber}
                                   onChange={(e) => { setDriverForm({ ...driverForm, plateNumber: e.target.value }); setDriverErrors({ ...driverErrors, plateNumber: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.plateNumber ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.plateNumber ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.plateNumber && <p className="text-red-500 text-xs mt-1">{driverErrors.plateNumber}</p>}
                               </div>
@@ -2707,7 +2757,7 @@ export default function App() {
                                   placeholder="موديل المركبة"
                                   value={driverForm.vehicleModel}
                                   onChange={(e) => { setDriverForm({ ...driverForm, vehicleModel: e.target.value }); setDriverErrors({ ...driverErrors, vehicleModel: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleModel ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleModel ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.vehicleModel && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleModel}</p>}
                               </div>
@@ -2720,7 +2770,7 @@ export default function App() {
                                   placeholder="سنة الصنع"
                                   value={driverForm.vehicleYear}
                                   onChange={(e) => { setDriverForm({ ...driverForm, vehicleYear: e.target.value }); setDriverErrors({ ...driverErrors, vehicleYear: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleYear ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleYear ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.vehicleYear && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleYear}</p>}
                               </div>
@@ -2733,7 +2783,7 @@ export default function App() {
                                   placeholder="لون المركبة"
                                   value={driverForm.vehicleColor}
                                   onChange={(e) => { setDriverForm({ ...driverForm, vehicleColor: e.target.value }); setDriverErrors({ ...driverErrors, vehicleColor: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleColor ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.vehicleColor ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.vehicleColor && <p className="text-red-500 text-xs mt-1">{driverErrors.vehicleColor}</p>}
                               </div>
@@ -2746,7 +2796,7 @@ export default function App() {
                                   placeholder="رقم الشاسيه"
                                   value={driverForm.chassisNumber}
                                   onChange={(e) => { setDriverForm({ ...driverForm, chassisNumber: e.target.value }); setDriverErrors({ ...driverErrors, chassisNumber: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.chassisNumber ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.chassisNumber ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.chassisNumber && <p className="text-red-500 text-xs mt-1">{driverErrors.chassisNumber}</p>}
                               </div>
@@ -2759,7 +2809,7 @@ export default function App() {
                                   placeholder="رقم رخصة القيادة"
                                   value={driverForm.licenseNumber}
                                   onChange={(e) => { setDriverForm({ ...driverForm, licenseNumber: e.target.value }); setDriverErrors({ ...driverErrors, licenseNumber: '' }) }}
-                                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.licenseNumber ? 'border-red-500' : 'border-slate-200'}`}
+                                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent transition-all text-right ${driverErrors.licenseNumber ? 'border-red-500' : 'border-slate-200'}`}
                                 />
                                 {driverErrors.licenseNumber && <p className="text-red-500 text-xs mt-1">{driverErrors.licenseNumber}</p>}
                               </div>
@@ -2864,11 +2914,11 @@ export default function App() {
                               </button>
                               <button
                                 onClick={handleDriverRegister}
-                                disabled={loading || !agreedToTerms}
+                                disabled={isLoading('driver-register') || !agreedToTerms}
                                 title={!agreedToTerms ? 'يجب الموافقة على الشروط والسياسات أولاً' : undefined}
                                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                               >
-                                {loading ? 'جاري الإرسال...' : 'إرسال الطلب'}
+                                {isLoading('driver-register') ? 'جاري الإرسال...' : 'إرسال الطلب'}
                               </button>
                             </div>
                           </div>
@@ -2924,6 +2974,7 @@ export default function App() {
                           pickup={currentOrder.pickupLocation}
                           delivery={currentOrder.deliveryLocation}
                           driverPosition={driverLivePosition}
+                          activeLeg={currentOrder.status === 'accepted' ? 'to_pickup' : 'to_delivery'}
                           height="280px"
                         />
                       </div>
@@ -2946,26 +2997,31 @@ export default function App() {
                       {currentOrder.status === 'accepted' && (
                         <button
                           onClick={() => handleUpdateDriverOrderStatus('picked_up')}
-                          disabled={loading}
+                          disabled={isLoading(`driver-status-${currentOrder?._id}`)}
                           className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
                         >
-                          {loading ? '...' : 'تم استلام الطرد'}
+                          {isLoading(`driver-status-${currentOrder?._id}`) ? '...' : 'تم استلام الطرد'}
                         </button>
                       )}
                       {currentOrder.status === 'picked_up' && (
                         <button
                           onClick={() => handleUpdateDriverOrderStatus('delivered')}
-                          disabled={loading}
+                          disabled={isLoading(`driver-status-${currentOrder?._id}`)}
                           className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50 sm:col-span-2"
                         >
-                          {loading ? '...' : 'تم تسليم الطلب'}
+                          {isLoading(`driver-status-${currentOrder?._id}`) ? '...' : 'تم تسليم الطلب'}
                         </button>
                       )}
                     </div>
                   </div>
                 )}
 
-                {driverProfile ? (
+                {driverProfileLoading ? (
+                  <div className="max-w-4xl mx-auto bg-white border border-slate-100 rounded-2xl shadow-xs p-10 text-center">
+                    <div className="w-10 h-10 border-4 border-green-100 border-t-green-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-500 font-semibold">جاري تحميل بيانات حسابك...</p>
+                  </div>
+                ) : driverProfile ? (
                   <div className="max-w-4xl mx-auto">
                     {/* Approval status banner */}
                     {!driverProfile.isApproved ? (
@@ -3088,7 +3144,7 @@ export default function App() {
                           driverEarnings.map((r: any) => (
                             <div
                               key={r.date}
-                              className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-green-100"
+                              className="flex items-center justify-between bg-white rounded-xl px-4 py-2.5 border border-green-100"
                             >
                               <span className="text-sm text-slate-600 font-medium">{r.date}</span>
                               <span className="text-xs text-slate-400">{r.orders} طلبات</span>
@@ -3152,7 +3208,7 @@ export default function App() {
                                   value={driverForm[f.key as keyof typeof driverForm]}
                                   onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
                                   required
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
+                                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
                                 />
                               </div>
                             ))}
@@ -3166,7 +3222,7 @@ export default function App() {
                                 value={driverForm.city}
                                 onChange={(e) => setDriverForm({ ...driverForm, city: e.target.value })}
                                 required
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
                               >
                                 <option value="">اختر مدينتك</option>
                                 {cities.map((c) => (
@@ -3212,7 +3268,7 @@ export default function App() {
                                   value={driverForm.vehicleType}
                                   onChange={(e) => setDriverForm({ ...driverForm, vehicleType: e.target.value })}
                                   required
-                                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
+                                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-right"
                                 >
                                   <option value="motorcycle">دراجة نارية</option>
                                   <option value="car">سيارة صغيرة</option>
@@ -3238,7 +3294,7 @@ export default function App() {
                                     value={driverForm[f.key as keyof typeof driverForm]}
                                     onChange={(e) => setDriverForm({ ...driverForm, [f.key]: e.target.value })}
                                     required
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right"
                                   />
                                 </div>
                               ))}
@@ -3374,11 +3430,11 @@ export default function App() {
                             </button>
                             <button
                               onClick={handleDriverRegister}
-                              disabled={loading || !agreedToTerms}
+                              disabled={isLoading('driver-register') || !agreedToTerms}
                               title={!agreedToTerms ? 'يجب الموافقة على الشروط والسياسات أولاً' : undefined}
                               className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                             >
-                              {loading ? 'جاري الإرسال...' : 'إرسال الطلب ✓'}
+                              {isLoading('driver-register') ? 'جاري الإرسال...' : 'إرسال الطلب ✓'}
                             </button>
                           </div>
                           {message && (
@@ -3438,17 +3494,17 @@ export default function App() {
                     )}
                     <button
                       onClick={handleVerifyOTP}
-                      disabled={loading}
+                      disabled={isLoading('verify-otp')}
                       className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                     >
-                      {loading ? 'جاري التحقق...' : 'تحقق من الرمز'}
+                      {isLoading('verify-otp') ? 'جاري التحقق...' : 'تحقق من الرمز'}
                     </button>
                     <button
                       onClick={handleResendOTP}
-                      disabled={loading}
+                      disabled={isLoading('resend-otp')}
                       className="w-full bg-yellow-400 hover:bg-yellow-300 text-green-800 font-bold py-2 rounded-xl transition-colors disabled:opacity-50"
                     >
-                      {loading ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
+                      {isLoading('resend-otp') ? 'جاري الإرسال...' : 'إعادة إرسال الرمز'}
                     </button>
                     <button
                       onClick={() => setActiveView('landing')}
@@ -3487,13 +3543,13 @@ export default function App() {
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={() => setActiveView('driver')}
-                  className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-2.5 rounded-xl transition-colors"
                 >
                   الذهاب إلى حسابي
                 </button>
                 <button
                   onClick={() => setActiveView('landing')}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-3 rounded-xl transition-colors"
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-2.5 rounded-xl transition-colors"
                 >
                   العودة للرئيسية
                 </button>
@@ -3548,6 +3604,19 @@ export default function App() {
                 ),
               },
             ] : []),
+            {
+              id: "about" as View,
+              label: "عن وصل",
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-5 h-5"
+                  fill="currentColor"
+                >
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+                </svg>
+              ),
+            },
             ...(token && user?.role === 'driver' ? [
               {
                 id: "driver" as View,
@@ -3578,19 +3647,6 @@ export default function App() {
                 ),
               },
             ] : []),
-            {
-              id: "about" as View,
-              label: "عن وصل",
-              icon: (
-                <svg
-                  viewBox="0 0 24 24"
-                  className="w-5 h-5"
-                  fill="currentColor"
-                >
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-                </svg>
-              ),
-            },
             ...(token ? [{
               id: "chat" as View,
               label: "الدردشة",
@@ -3642,7 +3698,7 @@ export default function App() {
                 <span className="absolute top-0 inset-x-4 h-0.5 bg-green-500 rounded-full" />
               )}
               {"isNotification" in item && item.isNotification ? (
-                <NotificationBellMobile onViewNotifications={() => setActiveView("notifications")} />
+                <NotificationBellMobile active={activeView === item.id} />
               ) : (
                 item.icon
               )}

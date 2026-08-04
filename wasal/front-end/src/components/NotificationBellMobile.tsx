@@ -5,10 +5,11 @@ import { getSocket } from '../services/socket';
 import { playNotificationSound } from '../utils/sound';
 
 interface NotificationBellMobileProps {
-  onViewNotifications?: () => void;
+  /** Whether the parent nav button is the currently active tab — used to match its color, just like every other bottom-nav icon. */
+  active?: boolean;
 }
 
-export default function NotificationBellMobile({ onViewNotifications }: NotificationBellMobileProps) {
+export default function NotificationBellMobile({ active = false }: NotificationBellMobileProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [justArrived, setJustArrived] = useState(false);
 
@@ -50,20 +51,17 @@ export default function NotificationBellMobile({ onViewNotifications }: Notifica
     }
   };
 
+  // No <button>/onClick here on purpose: this renders inside the shared
+  // bottom-nav <button>, so it only supplies the icon + unread badge and
+  // inherits color/click behavior from that parent, same as every other tab.
   return (
-    <div className="relative">
-      <button
-        onClick={onViewNotifications}
-        className="relative"
-        aria-label="الإشعارات"
-      >
-        <Bell className={`w-5 h-5 ${unreadCount > 0 ? 'text-green-600' : 'text-yellow-600'} ${justArrived ? 'animate-bounce' : ''}`} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
-    </div>
+    <span className="relative inline-flex">
+      <Bell className={`w-5 h-5 ${active ? 'text-green-600' : 'text-yellow-600'} ${justArrived ? 'animate-bounce' : ''}`} />
+      {unreadCount > 0 && (
+        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+          {unreadCount > 9 ? '9+' : unreadCount}
+        </span>
+      )}
+    </span>
   );
 }

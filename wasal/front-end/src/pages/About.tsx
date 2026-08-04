@@ -1,4 +1,5 @@
 import { MapPin, RefreshCw, Shield, MessageSquare, Star, Zap, Truck, Clock, DollarSign, CheckCircle } from 'lucide-react';
+import SocialLinks from '../components/SocialLinks';
 
 export default function About() {
   return (
@@ -173,9 +174,10 @@ export default function About() {
                 </div>
                 <span className="text-xl font-black">وصل</span>
               </div>
-              <p className="text-green-300 text-sm leading-relaxed">
+              <p className="text-green-300 text-sm leading-relaxed mb-4">
                 منصة توصيل داخل المدينة — سريع، آمن، موثوق
               </p>
+              <SocialLinks variant="footer" />
             </div>
             {[
               {

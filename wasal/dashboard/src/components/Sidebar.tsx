@@ -37,16 +37,12 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
   const handleMenuClick = (itemId: string) => {
     if (itemId === 'recharge-requests') {
       navigate('/recharge-requests');
-      if (window.innerWidth < 1024) {
-        onToggle();
-      }
+      if (window.innerWidth < 1024) onToggle();
       return;
     }
     onTabChange(itemId as any);
     navigate('/dashboard');
-    if (window.innerWidth < 1024) {
-      onToggle();
-    }
+    if (window.innerWidth < 1024) onToggle();
   };
 
   const handleLogout = () => {
@@ -57,56 +53,56 @@ export default function Sidebar({ onToggle, activeTab, onTabChange }: SidebarPro
   };
 
   return (
-    <>
-
-      {/* Sidebar */}
-      <aside
-        className="static top-0 right-0 h-full bg-white border-l border-slate-200 z-50"
-        style={{ width: '165px' }}
-      >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 bg-yellow-500 border-b border-slate-100">
-            <div className="flex items-center gap-1 p-2">
-              <div className="logo">
-                <img src="https://res.cloudinary.com/efc2cuqx/image/upload/f_auto/q_auto/wasal_jilzjp.png" alt="" />
-              </div>
-              <span className="text-3xl font-black text-white">وصل</span>
+    <aside
+      className="static top-0 right-0 h-full bg-card border-l border-border z-50 shadow-sm"
+      style={{ width: '178px' }}
+    >
+      <div className="flex flex-col h-full">
+        {/* Header / brand */}
+        <div className="flex items-center justify-center wasal-gradient border-b border-brand-700/20 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="logo">
+              <img
+                src="https://res.cloudinary.com/efc2cuqx/image/upload/f_auto/q_auto/wasal_jilzjp.png"
+                alt="شعار وصل"
+              />
             </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 px-2 py-4 space-y-2 overflow-y-auto">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleMenuClick(item.id)}
-                  className={`w-full flex items-center gap-1.5 px-3 py-2 rounded-sm text-sm font-bold transition-all ${activeTab === item.id
-                    ? 'bg-green-400 text-white shadow-xs'
-                    : 'text-yellow-600 hover:bg-green-50 hover:text-green-700'
-                    }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  {item.label}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Footer */}
-          <div className="p-4 border-t border-slate-100">
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              تسجيل الخروج
-            </button>
+            <span className="text-3xl font-black text-white">وصل</span>
           </div>
         </div>
-      </aside>
-    </>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-2.5 py-4 flex flex-col gap-1.5 overflow-y-auto">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleMenuClick(item.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${active
+                  ? 'wasal-gradient text-white shadow-md shadow-brand-500/25'
+                  : 'text-brand-800 hover:bg-brand-50'
+                  }`}
+              >
+                <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-white' : 'text-gold-500'}`} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-border">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            تسجيل الخروج
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 }
