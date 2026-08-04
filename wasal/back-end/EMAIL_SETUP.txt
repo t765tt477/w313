@@ -1,35 +1,36 @@
-إعداد البريد الإلكتروني باستخدام SendGrid
+إعداد البريد الإلكتروني باستخدام Postmark
 ==========================================
 
-تم تحديث خدمة البريد الإلكتروني لاستخدام SendGrid بدلاً من Gmail SMTP، لأن SendGrid يعمل بشكل أفضل على منصات السحابة مثل Render.
+تم تحديث خدمة البريد الإلكتروني لاستخدام Postmark بدلاً من Gmail SMTP، لأن Postmark يعمل بشكل أفضل على منصات السحابة مثل Render ويوفر سرعة تسليم عالية للرسائل.
 
 الخطوات للإعداد:
 ------------------
 
-1. إنشاء حساب SendGrid مجاني
-   - اذهب إلى https://sendgrid.com/
-   - قم بالتسجيل للحصول على حساب مجاني (100 رسالة يومياً)
-   - بعد التسجيل، اذهب إلى Settings > API Keys
-   - أنشئ API Key جديد باسم "Wasal Backend"
-   - احفظ الـ API Key (لن يظهر مرة أخرى)
+1. إنشاء حساب Postmark مجاني
+   - اذهب إلى https://postmarkapp.com/
+   - قم بالتسجيل للحصول على حساب مجاني (200 رسالة يومياً)
+   - بعد التسجيل، اذهب إلى https://account.postmarkapp.com/servers
+   - أنشئ Server جديد باسم "Wasal Backend"
+   - احفظ الـ API Key من إعدادات الـ Server
 
-2. إعداد Sender ID
-   - في SendGrid Dashboard، اذهب إلى Settings > Sender Authentication
-   - انقر على "Create a Single Sender"
+2. إعداد Sender Signature
+   - في Postmark Dashboard، اذهب إلى https://account.postmarkapp.com/signatures
+   - انقر على "Create a Signature"
    - أدخل معلومات المرسل (الاسم، البريد الإلكتروني)
    - أكمل عملية التحقق من البريد الإلكتروني
 
 3. إضافة متغيرات البيئة في Render
    أضف المتغيرات التالية في Render Dashboard:
    
-   SENDGRID_API_KEY=your_api_key_here
-   SENDGRID_FROM_EMAIL=your_verified_email@example.com
+   POSTMARK_API_KEY=your_api_key_here
+   POSTMARK_FROM_EMAIL=your_verified_email@example.com
 
 4. إعادة نشر التطبيق
    بعد إضافة المتغيرات، أعد نشر التطبيق في Render لتفعيل التغييرات.
 
 ملاحظات مهمة:
 ---------------
-- SendGrid يقدم 100 رسالة مجانية يومياً
-- تأكد من التحقق من البريد الإلكتروني المرسل (Sender ID)
+- Postmark يقدم 200 رسالة مجانية يومياً
+- تأكد من التحقق من البريد الإلكتروني المرسل (Sender Signature)
+- Postmark يوفر سرعة تسليم عالية للرسائل (ثوانٍ فقط)
 - إذا تجاوزت الحد اليومي، ستحتاج للترقية إلى خطة مدفوعة
