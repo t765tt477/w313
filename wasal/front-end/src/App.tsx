@@ -177,6 +177,17 @@ export default function App() {
       } catch { /* ignore */ }
     }
 
+    // Order cancelled by client
+    const onOrderCancelled = async (payload: any) => {
+      if (payload?.sound) playNotificationSound()
+      setMessage(payload?.message || 'تم إلغاء الطلب')
+      try {
+        const res = await orderAPI.getOrderById(payload.orderId)
+        setCurrentOrder((prev: any) => prev && prev._id === payload.orderId ? res.data.order : prev)
+        setOrders((prev) => prev.map((o) => o._id === payload.orderId ? res.data.order : o))
+      } catch { /* ignore */ }
+    }
+
     // Order timeout - auto-cancelled due to no available drivers
     const onOrderTimeout = async (payload: any) => {
       if (payload?.sound) playNotificationSound()
@@ -223,6 +234,7 @@ export default function App() {
     socket.on('order:new_offer', onNewOffer)
     socket.on('order:accepted', onOrderAccepted)
     socket.on('order:status_changed', onStatusChanged)
+    socket.on('order:cancelled', onOrderCancelled)
     socket.on('order:timeout', onOrderTimeout)
     socket.on('driver:location', onDriverLocation)
     socket.on('balance:updated', onBalanceUpdated)
@@ -234,6 +246,7 @@ export default function App() {
       socket.off('order:new_offer', onNewOffer)
       socket.off('order:accepted', onOrderAccepted)
       socket.off('order:status_changed', onStatusChanged)
+      socket.off('order:cancelled', onOrderCancelled)
       socket.off('order:timeout', onOrderTimeout)
       socket.off('driver:location', onDriverLocation)
       socket.off('balance:updated', onBalanceUpdated)
@@ -274,6 +287,22 @@ export default function App() {
     )
     return () => navigator.geolocation.clearWatch(watchId)
   }, [user?.role, currentOrder?._id, currentOrder?.status])
+
+  // Handle order cancellation for drivers
+  useEffect(() => {
+    if (!token || user?.role !== 'driver') return
+
+    const socket = getSocket(token as string)
+    const onOrderCancelledByClient = (payload: any) => {
+      if (currentOrder && currentOrder._id === payload.orderId) {
+        setMessage(payload.message || 'تم إلغاء الطلب من قبل الزبون')
+        setCurrentOrder(null)
+        setActiveView('driver')
+      }
+    }
+    socket.on('order:cancelled', onOrderCancelledByClient)
+    return () => socket.off('order:cancelled', onOrderCancelledByClient)
+  }, [token, user?.role, currentOrder?._id])
 
   const handleAcceptOffer = async () => {
     if (!incomingOffer) return
@@ -576,6 +605,10 @@ export default function App() {
 
   const handleCancelOrder = async () => {
     if (!currentOrder) return
+    const confirmMessage = currentOrder.status === 'accepted'
+      ? 'تم قبول الطلب من قبل مندوب. هل أنت متأكد من إلغاء هذا الطلب؟'
+      : 'هل أنت متأكد من إلغاء هذا الطلب؟'
+    if (!confirm(confirmMessage)) return
     setLoadingAction(`cancel-order-${currentOrder?._id}`)
     try {
       const res = await orderAPI.cancelOrder(currentOrder._id, { reason: 'client' })
@@ -918,6 +951,15 @@ export default function App() {
                 <span>{incomingOffer.deliveryLocation?.address || 'موقع محدد على الخريطة'}</span>
               </div>
             </div>
+
+            {/* Client Information */}
+            {incomingOffer.client && (
+              <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 mb-4">
+                <div className="font-semibold text-blue-800 mb-1 text-sm">👤 معلومات الزبون</div>
+                <div className="text-slate-700 font-medium text-sm">{incomingOffer.client.name || 'غير معروف'}</div>
+                <div className="text-slate-600 text-sm mt-1">📞 {incomingOffer.client.phone || '---'}</div>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2 text-center text-xs mb-5">
               <div className="bg-green-50 rounded-xl p-2 border border-green-100">
                 <div className="font-black text-green-700">{incomingOffer.distanceToPickupKm} كم</div>
@@ -1857,8 +1899,8 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    {/* Cancel button for pending orders */}
-                    {currentOrder.status === 'pending' && (
+                    {/* Cancel button for pending and accepted orders */}
+                    {(currentOrder.status === 'pending' || currentOrder.status === 'accepted') && (
                       <div className="mb-4 flex flex-row justify-evenly">
                         <button
                           onClick={handleCancelOrder}
@@ -1991,6 +2033,9 @@ export default function App() {
                           <div className="text-sm text-slate-500">
                             {currentOrder.driver.vehicleType || 'دراجة نارية'} • {currentOrder.driver.vehicleNumber || '---'}
                           </div>
+                          <div className="text-sm text-slate-600 font-medium mt-1">
+                            📞 {currentOrder.driver.phone || '---'}
+                          </div>
                           <div className="flex items-center gap-1 mt-1">
                             {[1, 2, 3, 4, 5].map((n) => (
                               <span key={n} className={`text-xs ${n <= Math.round(currentOrder.driver.rating || 0) ? 'text-yellow-400' : 'text-slate-200'}`}>
@@ -2000,7 +2045,14 @@ export default function App() {
                             <span className="text-xs text-slate-500 mr-1">{(currentOrder.driver.rating || 0).toFixed(1)}</span>
                           </div>
                         </div>
-                        <button className="bg-green-100 text-green-700 font-bold text-sm px-4 py-2 rounded-xl hover:bg-green-200 transition-colors">
+                        <button
+                          onClick={() => {
+                            if (currentOrder.driver.phone) {
+                              window.open(`tel:${currentOrder.driver.phone}`, '_self')
+                            }
+                          }}
+                          className="bg-green-100 text-green-700 font-bold text-sm px-4 py-2 rounded-xl hover:bg-green-200 transition-colors"
+                        >
                           اتصال
                         </button>
                       </div>
@@ -2248,7 +2300,7 @@ export default function App() {
                         </div>
                         <div>
                           <div className="font-bold text-slate-900 text-sm">{selectedOrderForTracking.driver.name || '---'}</div>
-                          <div className="text-xs text-slate-500">{selectedOrderForTracking.driver.phone || '---'}</div>
+                          <div className="text-xs text-slate-600 font-medium">📞 {selectedOrderForTracking.driver.phone || '---'}</div>
                         </div>
                       </div>
                     </div>
@@ -2259,10 +2311,13 @@ export default function App() {
               {/* Floating action buttons */}
               <div className="absolute bottom-35 left-4 right-4 z-10">
                 <div className="flex flex-col w-fit gap-2">
-                  {selectedOrderForTracking.status === 'pending' && (
+                  {(selectedOrderForTracking.status === 'pending' || selectedOrderForTracking.status === 'accepted') && (
                     <button
                       onClick={async () => {
-                        if (!confirm('هل أنت متأكد من إلغاء هذا الطلب؟')) return
+                        const confirmMessage = selectedOrderForTracking.status === 'accepted'
+                          ? 'تم قبول الطلب من قبل مندوب. هل أنت متأكد من إلغاء هذا الطلب؟'
+                          : 'هل أنت متأكد من إلغاء هذا الطلب؟'
+                        if (!confirm(confirmMessage)) return
                         setLoadingAction(`cancel-order-${selectedOrderForTracking._id}`)
                         try {
                           const res = await orderAPI.cancelOrder(selectedOrderForTracking._id, { reason: 'client' })
@@ -3571,6 +3626,25 @@ export default function App() {
                     <div className="text-slate-500 mt-1">{currentOrder.deliveryLocation?.contactName} — {currentOrder.deliveryLocation?.contactPhone}</div>
                   </div>
                 </div>
+
+                {/* Client Information for Driver */}
+                {currentOrder.client && (
+                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 mb-4">
+                    <div className="font-semibold text-blue-800 mb-2">👤 معلومات الزبون</div>
+                    <div className="text-slate-700 font-medium">{currentOrder.client.name || 'غير معروف'}</div>
+                    <div className="text-slate-600 mt-1">📞 {currentOrder.client.phone || '---'}</div>
+                    <button
+                      onClick={() => {
+                        if (currentOrder.client.phone) {
+                          window.open(`tel:${currentOrder.client.phone}`, '_self')
+                        }
+                      }}
+                      className="mt-2 bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors"
+                    >
+                      اتصال بالزبون
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid sm:grid-cols-2 gap-3">
                   {currentOrder.status === 'accepted' && (

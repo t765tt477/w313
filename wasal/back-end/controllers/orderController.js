@@ -78,7 +78,7 @@ export const createOrder = async (req, res) => {
 export const getUserOrders = async (req, res) => {
   try {
     const orders = await Order.find({ client: req.user.id })
-      .populate('driver')
+      .populate('driver', 'name phone profileImage vehicleType vehicleNumber rating')
       .sort({ createdAt: -1 });
     res.status(200).json({ orders });
   } catch (error) {
@@ -91,7 +91,7 @@ export const getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate('client', 'name phone')
-      .populate('driver');
+      .populate('driver', 'name phone profileImage vehicleType vehicleNumber rating');
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
@@ -99,7 +99,7 @@ export const getOrderById = async (req, res) => {
 
     // Check if user owns the order or is the driver
     if (order.client._id.toString() !== req.user.id &&
-      (!order.driver || order.driver.user?.toString() !== req.user.id)) {
+      (!order.driver || order.driver._id.toString() !== req.user.id)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -122,8 +122,9 @@ export const cancelOrder = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    if (order.status !== 'pending') {
-      return res.status(400).json({ message: 'Cannot cancel order in progress' });
+    // Allow cancellation for pending and accepted orders, but not after pickup
+    if (!['pending', 'accepted'].includes(order.status)) {
+      return res.status(400).json({ message: 'Cannot cancel order after pickup' });
     }
 
     const { reason = 'client' } = req.body;
@@ -134,7 +135,28 @@ export const cancelOrder = async (req, res) => {
     order.cancelledAt = new Date();
     order.cancelReason = reason;
     await order.save();
-    await dispatchService.cancelDispatch(order._id);
+
+    // Cancel dispatch if order is still pending
+    if (order.status === 'pending') {
+      await dispatchService.cancelDispatch(order._id);
+    }
+
+    // Notify the driver if order was accepted
+    if (order.driver) {
+      await createNotification(
+        order.driver,
+        'order_cancelled',
+        'تم إلغاء الطلب',
+        'قام الزبون بإلغاء الطلب',
+        { orderId: order._id },
+        'Driver',
+        true
+      );
+      emitToUser(order.driver, 'order:cancelled', {
+        orderId: order._id,
+        message: 'قام الزبون بإلغاء الطلب'
+      });
+    }
 
     res.status(200).json({ message: 'Order cancelled', order });
   } catch (error) {

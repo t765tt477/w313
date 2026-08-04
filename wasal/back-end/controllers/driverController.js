@@ -168,6 +168,11 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    // Check if order was cancelled by client
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ message: 'تم إلغاء هذا الطلب من قبل الزبون' });
+    }
+
     order.status = status;
     if (status === 'picked_up') {
       order.pickedUpAt = new Date();

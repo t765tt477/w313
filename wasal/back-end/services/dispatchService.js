@@ -111,6 +111,10 @@ export const dispatchOrder = async (orderId) => {
   // Push the offer to the driver in real time.
   emitToUser(match.driver._id, 'order:new_offer', {
     orderId: order._id,
+    client: {
+      name: order.client.name,
+      phone: order.client.phone
+    },
     pickupLocation: order.pickupLocation,
     deliveryLocation: order.deliveryLocation,
     packageDetails: order.packageDetails,
@@ -126,7 +130,7 @@ export const dispatchOrder = async (orderId) => {
     match.driver._id, 'Driver',
     order.dispatchAttempts > 1 ? 'order_reassigned' : 'order_offer',
     'طلب توصيل جديد',
-    `طلب جديد على بعد ${(Math.round(match.distanceKm * 10) / 10)} كم من موقعك، لديك دقيقتان للرد.`,
+    `طلب جديد على بعد ${(Math.round(match.distanceKm * 60) / 60)} كم من موقعك، لديك دقيقتان للرد.`,
     { orderId: order._id }
   );
 
@@ -210,7 +214,7 @@ export const acceptOrder = async (orderId, driverId) => {
 
   const populatedOrder = await Order.findById(order._id)
     .populate('client', 'name phone')
-    .populate('driver');
+    .populate('driver', 'name phone profileImage vehicleType vehicleNumber rating');
 
   emitToUser(order.client._id, 'order:accepted', {
     orderId: order._id,
