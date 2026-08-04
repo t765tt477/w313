@@ -162,8 +162,35 @@ export default function App() {
     // Client's order got accepted by a driver.
     const onOrderAccepted = (payload: any) => {
       if (payload?.sound) playNotificationSound()
-      setCurrentOrder((prev: any) => prev && prev._id === payload.orderId ? payload.order : prev)
-      setOrders((prev) => prev.map((o) => o._id === payload.orderId ? payload.order : o))
+      // Update order with driver information from payload
+      setCurrentOrder((prev: any) => {
+        if (prev && prev._id === payload.orderId) {
+          const updatedOrder = payload.order || prev
+          // Ensure driver info is included from the payload driver object
+          if (payload.driver && updatedOrder.driver) {
+            updatedOrder.driver = {
+              ...updatedOrder.driver,
+              ...payload.driver
+            }
+          }
+          return updatedOrder
+        }
+        return prev
+      })
+      setOrders((prev) => prev.map((o) => {
+        if (o._id === payload.orderId) {
+          const updatedOrder = payload.order || o
+          // Ensure driver info is included from the payload driver object
+          if (payload.driver && updatedOrder.driver) {
+            updatedOrder.driver = {
+              ...updatedOrder.driver,
+              ...payload.driver
+            }
+          }
+          return updatedOrder
+        }
+        return o
+      }))
       setMessage('تم قبول طلبك من قبل مندوب')
     }
 
@@ -2295,9 +2322,20 @@ export default function App() {
                   {selectedOrderForTracking.driver && (
                     <div className="bg-slate-50 rounded-xl p-1">
                       <div className="flex items-center gap-2">
-                        <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          {selectedOrderForTracking.driver.name?.[0] || 'م'}
-                        </div>
+                        {selectedOrderForTracking.driver.profileImage ? (
+                          <img
+                            src={selectedOrderForTracking.driver.profileImage}
+                            alt="Driver"
+                            className="w-10 h-10 rounded-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {selectedOrderForTracking.driver.name?.[0] || 'م'}
+                          </div>
+                        )}
                         <div>
                           <div className="font-bold text-slate-900 text-sm">{selectedOrderForTracking.driver.name || '---'}</div>
                           <div className="text-xs text-slate-600 font-medium">📞 {selectedOrderForTracking.driver.phone || '---'}</div>
@@ -3591,7 +3629,7 @@ export default function App() {
             </div>
 
             {currentOrder && ['accepted', 'picked_up'].includes(currentOrder.status) && (
-              <div className="bg-white border border-slate-100 rounded-2xl shadow-xs p-4 mb-6">
+              <div className="bg-white mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-black text-slate-900">
                     طلب جارٍ #{currentOrder._id?.slice(-6)}
